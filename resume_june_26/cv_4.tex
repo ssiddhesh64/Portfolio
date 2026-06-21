@@ -1,0 +1,110 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Medium Length Professional CV
+% LaTeX Template
+% Version 2.0
+%
+% Important note:
+% This template requires the resume.cls file to be in the same directory as the
+% .tex file. The resume.cls file provides the resume style used for structuring the
+% document.
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%----------------------------------------------------------------------------------------
+%	PACKAGES AND OTHER DOCUMENT CONFIGURATIONS
+%----------------------------------------------------------------------------------------
+
+\documentclass{cv_4} % Use the custom resume.cls style
+
+% \input{glyphtounicode} % Added by chatgpt for ATS parsing
+% \pdfgentounicode=1  % Added by chatgpt for ATS parsing
+
+% \usepackage[left=0.75in,top=0.6in,right=0.75in,bottom=0.6in]{geometry} % Document margins
+
+\fontdir[fonts/]
+
+% Color for highlights
+% Awesome Colors: awesome-emerald, awesome-skyblue, awesome-red, awesome-pink, awesome-orange
+%                 awesome-nephritis, awesome-concrete, awesome-darknight
+\colorlet{awesome}{awesome-red}
+% Uncomment if you would like to specify your own color
+% \definecolor{awesome}{HTML}{CA63A8}
+
+% Colors for text
+% Uncomment if you would like to specify your own color
+% \definecolor{darktext}{HTML}{414141}
+% \definecolor{text}{HTML}{333333}
+% \definecolor{graytext}{HTML}{5D5D5D}
+% \definecolor{lighttext}{HTML}{999999}
+
+% Set false if you don't want to highlight section with awesome color
+\setbool{acvSectionColorHighlight}{false}
+
+% If you would like to change the social information separator from a pipe (|) to something else
+\renewcommand{\acvHeaderSocialSep}{\quad\textbar\quad}
+
+\makeatletter
+\patchcmd{\@sectioncolor}{\color}{\mdseries\color}{}{}
+\makeatother
+
+%-------------------------------------------------------------------------------
+%	PERSONAL INFORMATION
+%	Comment any of the lines below if they are not required
+%-------------------------------------------------------------------------------
+% Available options: circle|rectangle,edge/noedge,left/right
+% \photo[rectangle,edge,right]{profile}
+\name{Siddhesh}{Sawant}
+% \position{{\enskip\cdotp\enskip}}
+\position{Software Engineer | Backend Developer}
+% \address{246-1002, Gwangmyeongmayrouge Apt. 86, Cheongna lime-ro, Seo-gu, Incheon-si, 404-180, Rep. of KOREA}
+
+\mobile{+91 8660911187}
+\email{ssiddhesh64@gmail.com}
+% \homepage{michaelpollind.com}
+\github{https://github.com/ssiddhesh64}
+\linkedin{https://www.linkedin.com/in/ssiddhesh64/}
+% \gitlab{gitlab-id}
+% \stackoverflow{SO-id}{SO-name}
+% \twitter{@MPollind}
+% \skype{skype-id}
+% \reddit{reddit-id}
+% \extrainfo{extra informations}
+
+% \quote{``Be the change that you want to see in the world."}
+
+% ----------------------------------------------------------------------------
+% \name{SIDDHESH SAWANT} % Your name
+% % \address{(+91)~9022441860 \\ email \href{ssiddhesh64@gmail.com}{} }% Your phone number and email
+% \address{(+91)~9022441860 \\ \email{ssiddhesh64@gmail.com}}
+% ----------------------------------------------------------------------------
+\begin{document}
+
+\makecvheader[C]
+
+% \makecvfooter
+%   {\today}
+%   {Siddhesh Sawant~~~·~~~Resume}
+%   {\thepage}
+
+
+%-------------------------------------------------------------------------------
+%	CV/RESUME CONTENT
+%	Each section is imported separately, open each file in turn to modify content
+%-------------------------------------------------------------------------------
+
+% \input{resume/education.tex}
+\input{resume/summary.tex}
+\input{resume/industry-exposure}
+\input{resume/technical-strengths}
+\input{resume/education.tex}
+% \input{resume/honors.tex}
+% \input{resume/presentation.tex}
+% \input{resume/writing.tex}
+% \input{resume/committees.tex}
+\input{resume/projects.tex}
+% \input{resume/organizations.tex}
+% \input{resume/extracurricular.tex}
+% \input{resume/language_frameworks.tex}
+%-------------------------------------------------------------------------------% \end{rSection}
+
+\end{document}
