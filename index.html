@@ -6,6 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Portfolio of Siddhesh Sawant, Backend Engineer with over 5 years of experience scaling high-performance microservices, event-driven pipelines, and cloud databases." />
     <title>Siddhesh Sawant | Backend Engineer Portfolio</title>
+    <script>
+      (function() {
+        const theme = localStorage.getItem('theme') || 'light';
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark-theme');
+        } else {
+          document.documentElement.classList.remove('dark-theme');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
