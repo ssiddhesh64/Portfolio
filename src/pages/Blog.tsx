@@ -219,9 +219,6 @@ export const Blog: React.FC = () => {
                           borderTopRightRadius: 0,
                           borderBottomLeftRadius: 'var(--border-radius-sm)',
                           borderBottomRightRadius: 'var(--border-radius-sm)',
-                          backgroundColor: isDark
-                            ? 'var(--bg-secondary)'
-                            : '#f9fafb',
                           fontSize: '0.9rem',
                         }}
                       >
