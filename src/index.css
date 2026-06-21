@@ -19,11 +19,7 @@
 
   body {
     min-height: 100vh;
-    font-family:
-      'Inter',
-      system-ui,
-      -apple-system,
-      sans-serif;
+    font-family: var(--font-body);
     line-height: 1.6;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
@@ -60,11 +56,6 @@
     --font-heading: 'Outfit', sans-serif;
     --font-body: 'Inter', sans-serif;
 
-    /* Primary, Secondary, Tertiary definitions */
-    --primary: #111827;
-    --secondary: #3b82f6;
-    --tertiary: #f3f4f6;
-
     /* Theme Variables - Default to Light mode, but we use .dark-theme to toggle */
     --bg-primary: #ffffff;
     --bg-secondary: #f3f4f6;
@@ -78,10 +69,13 @@
     --accent-glow: rgba(59, 130, 246, 0.15);
     --accent-hover: #2563eb;
     --accent-gradient: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    --accent-secondary: #a855f7;
+    --accent-secondary-glow: rgba(168, 85, 247, 0.1);
 
     /* Glassmorphism & Cards */
     --card-bg: #f9fafb;
     --card-border: #e5e7eb;
+    --card-hover-border: rgba(59, 130, 246, 0.15);
     --card-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.03);
 
     --nav-bg: rgba(255, 255, 255, 0.85);
@@ -112,9 +106,12 @@
       hsl(250, 95%, 68%) 0%,
       hsl(280, 90%, 62%) 100%
     );
+    --accent-secondary: hsl(280, 90%, 62%);
+    --accent-secondary-glow: hsla(280, 90%, 62%, 0.15);
 
     --card-bg: rgba(18, 22, 35, 0.55);
     --card-border: rgba(255, 255, 255, 0.05);
+    --card-hover-border: hsla(250, 95%, 68%, 0.15);
     --card-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
 
     --nav-bg: rgba(13, 16, 27, 0.75);
@@ -169,7 +166,7 @@
   }
 
   .glass-card:hover {
-    border-color: rgba(250, 95, 60, 0.15);
+    border-color: var(--card-hover-border);
     box-shadow: 0 12px 40px 0 var(--accent-glow);
   }
 
@@ -751,7 +748,7 @@
     width: 350px;
     height: 350px;
     border-radius: 50%;
-    background: hsla(280, 90%, 60%, 0.1);
+    background: var(--accent-secondary-glow);
     filter: blur(100px);
     z-index: -1;
   }
