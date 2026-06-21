@@ -57,27 +57,32 @@
     --font-heading: 'Outfit', sans-serif;
     --font-body: 'Inter', sans-serif;
 
+    /* Primary, Secondary, Tertiary definitions */
+    --primary: #111827;
+    --secondary: #3B82F6;
+    --tertiary: #F3F4F6;
+
     /* Theme Variables - Default to Light mode, but we use .dark-theme to toggle */
-    --bg-primary: hsl(210, 20%, 98%);
-    --bg-secondary: hsl(210, 16%, 93%);
-    --bg-tertiary: hsl(210, 14%, 89%);
+    --bg-primary: #FFFFFF;
+    --bg-secondary: #F3F4F6;
+    --bg-tertiary: #E5E7EB;
 
-    --text-primary: hsl(222, 47%, 12%);
-    --text-secondary: hsl(220, 15%, 40%);
-    --text-muted: hsl(220, 10%, 60%);
+    --text-primary: #111827;
+    --text-secondary: #6B7280;
+    --text-muted: #9CA3AF;
 
-    --accent: hsl(250, 95%, 60%);
-    --accent-glow: hsla(250, 95%, 60%, 0.15);
-    --accent-hover: hsl(250, 95%, 52%);
-    --accent-gradient: linear-gradient(135deg, hsl(250, 95%, 60%) 0%, hsl(280, 90%, 55%) 100%);
+    --accent: #3B82F6;
+    --accent-glow: rgba(59, 130, 246, 0.15);
+    --accent-hover: #2563EB;
+    --accent-gradient: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%);
 
     /* Glassmorphism & Cards */
-    --card-bg: rgba(255, 255, 255, 0.65);
-    --card-border: rgba(0, 0, 0, 0.05);
-    --card-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.04);
+    --card-bg: #F9FAFB;
+    --card-border: #E5E7EB;
+    --card-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.03);
 
-    --nav-bg: rgba(255, 255, 255, 0.7);
-    --nav-border: rgba(0, 0, 0, 0.04);
+    --nav-bg: rgba(255, 255, 255, 0.85);
+    --nav-border: #E5E7EB;
 
     --border-radius-sm: 8px;
     --border-radius-md: 16px;
