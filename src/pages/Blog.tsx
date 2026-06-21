@@ -1,14 +1,122 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Clock, Calendar, Tag, BookOpen } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import {
+  oneDark,
+  oneLight,
+} from 'react-syntax-highlighter/dist/esm/styles/prism';
+import mermaid from 'mermaid';
 import { blogPosts } from '../data/blogData';
 import { useMetadata } from '../hooks/useMetadata';
+
+// Copy Button Component for Code Blocks
+const CopyButton: React.FC<{ code: string }> = ({ code }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy code: ', err);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="code-block-copy-btn"
+      title="Copy code"
+    >
+      {copied ? 'Copied!' : 'Copy'}
+    </button>
+  );
+};
+
+// Mermaid Diagram Component
+const Mermaid: React.FC<{ chart: string; isDark: boolean }> = ({
+  chart,
+  isDark,
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [svg, setSvg] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    setError(null);
+    setSvg('');
+
+    const id = `mermaid-${Math.random().toString(36).substring(2, 9)}`;
+
+    const renderChart = async () => {
+      try {
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: isDark ? 'dark' : 'default',
+          securityLevel: 'loose',
+          fontFamily: 'Inter, sans-serif',
+          themeVariables: {
+            background: isDark ? '#1a1f2c' : '#ffffff',
+            primaryColor: isDark ? '#6366f1' : '#3b82f6',
+            primaryTextColor: isDark ? '#f3f4f6' : '#1f2937',
+            lineColor: isDark ? '#4b5563' : '#d1d5db',
+          },
+        });
+
+        const { svg: renderedSvg } = await mermaid.render(id, chart);
+        setSvg(renderedSvg);
+      } catch (err) {
+        console.error('Mermaid render error:', err);
+        setError('Failed to render diagram');
+      }
+    };
+
+    renderChart();
+  }, [chart, isDark]);
+
+  if (error) {
+    return (
+      <div className="mermaid-error-container">
+        <p className="mermaid-error-text">{error}</p>
+        <pre className="mermaid-error-raw">
+          <code>{chart}</code>
+        </pre>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className="mermaid-diagram-container"
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  );
+};
 
 export const Blog: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+
+  const [isDark, setIsDark] = useState(() =>
+    document.documentElement.classList.contains('dark-theme'),
+  );
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains('dark-theme'));
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+    return () => observer.disconnect();
+  }, []);
 
   const post = id ? blogPosts.find((p) => p.id === id) : undefined;
 
@@ -73,7 +181,57 @@ export const Blog: React.FC = () => {
           </div>
 
           <div className="blog-post-content">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                code(props) {
+                  const { children, className, ...rest } = props;
+                  const match = /language-(\w+)/.exec(className || '');
+                  const language = match ? match[1] : '';
+
+                  if (!match) {
+                    return (
+                      <code className={className} {...rest}>
+                        {children}
+                      </code>
+                    );
+                  }
+
+                  const codeString = String(children).replace(/\n$/, '');
+
+                  if (language === 'mermaid') {
+                    return <Mermaid chart={codeString} isDark={isDark} />;
+                  }
+
+                  return (
+                    <div className="code-block-wrapper">
+                      <div className="code-block-header">
+                        <span className="code-block-lang">{language}</span>
+                        <CopyButton code={codeString} />
+                      </div>
+                      <SyntaxHighlighter
+                        PreTag="div"
+                        language={language}
+                        style={isDark ? oneDark : oneLight}
+                        customStyle={{
+                          margin: 0,
+                          borderTopLeftRadius: 0,
+                          borderTopRightRadius: 0,
+                          borderBottomLeftRadius: 'var(--border-radius-sm)',
+                          borderBottomRightRadius: 'var(--border-radius-sm)',
+                          backgroundColor: isDark
+                            ? 'var(--bg-secondary)'
+                            : '#f9fafb',
+                          fontSize: '0.9rem',
+                        }}
+                      >
+                        {codeString}
+                      </SyntaxHighlighter>
+                    </div>
+                  );
+                },
+              }}
+            >
               {post.content}
             </ReactMarkdown>
           </div>
