@@ -8,9 +8,9 @@ export interface BlogPost {
   tags: string[];
 }
 
-// Dynamically glob-import all markdown files from the root 'blogs' folder
+// Dynamically glob-import all markdown files from the 'content/blogs' folder
 // { query: '?raw', import: 'default', eager: true } yields Record<filepath, rawTextContentString>
-const rawModules = import.meta.glob('../../blogs/*.md', {
+const rawModules = import.meta.glob('../content/blogs/*.md', {
   query: '?raw',
   import: 'default',
   eager: true,
@@ -22,8 +22,8 @@ function parseMarkdown(filepath: string, rawContent: string): BlogPost {
 
   let title = id.replace(/-/g, ' ');
   let date = new Date().toLocaleDateString();
-  let readTime = "5 min read";
-  let summary = "";
+  let readTime = '5 min read';
+  let summary = '';
   let tags: string[] = [];
   let content = rawContent;
 
@@ -33,40 +33,74 @@ function parseMarkdown(filepath: string, rawContent: string): BlogPost {
       const yaml = parts[1];
       content = parts.slice(2).join('---').trim();
 
-      // Basic frontmatter parser
-      yaml.split('\n').forEach(line => {
-        const colonIndex = line.indexOf(':');
-        if (colonIndex !== -1) {
-          const key = line.slice(0, colonIndex).trim();
-          let value = line.slice(colonIndex + 1).trim();
-          
-          // Strip enclosing quotes if present
-          if (value.startsWith('"') && value.endsWith('"')) {
-            value = value.slice(1, -1);
-          } else if (value.startsWith("'") && value.endsWith("'")) {
-            value = value.slice(1, -1);
-          }
+      // Robust state-machine frontmatter parser supporting multi-line fields (e.g. formatted arrays/tags)
+      let currentKey: string | null = null;
+      let currentValueAccumulator: string[] = [];
 
-          if (key === 'title') title = value;
-          else if (key === 'date') date = value;
-          else if (key === 'readTime') readTime = value;
-          else if (key === 'summary') summary = value;
-          else if (key === 'tags') {
-            if (value.startsWith('[') && value.endsWith(']')) {
-              tags = value.slice(1, -1).split(',').map(t => t.trim().replace(/['"]/g, ''));
-            } else {
-              tags = [value];
-            }
+      const saveCurrentField = () => {
+        if (!currentKey) return;
+        const joinedValue = currentValueAccumulator.join('\n').trim();
+
+        let cleanValue = joinedValue;
+        if (cleanValue.startsWith('"') && cleanValue.endsWith('"')) {
+          cleanValue = cleanValue.slice(1, -1);
+        } else if (cleanValue.startsWith("'") && cleanValue.endsWith("'")) {
+          cleanValue = cleanValue.slice(1, -1);
+        }
+
+        if (currentKey === 'title') title = cleanValue;
+        else if (currentKey === 'date') date = cleanValue;
+        else if (currentKey === 'readTime') readTime = cleanValue;
+        else if (currentKey === 'summary') summary = cleanValue;
+        else if (currentKey === 'tags') {
+          if (cleanValue.startsWith('[') && cleanValue.endsWith(']')) {
+            tags = cleanValue
+              .slice(1, -1)
+              .split(',')
+              .map((t) => t.trim().replace(/['"]/g, ''))
+              .filter((t) => t.length > 0);
+          } else if (cleanValue.includes('- ')) {
+            tags = cleanValue
+              .split('\n')
+              .map((line) =>
+                line
+                  .replace(/^\s*-\s*/, '')
+                  .trim()
+                  .replace(/['"]/g, ''),
+              )
+              .filter((t) => t.length > 0);
+          } else {
+            tags = [cleanValue].filter((t) => t.length > 0);
+          }
+        }
+      };
+
+      yaml.split('\n').forEach((line) => {
+        const colonIndex = line.indexOf(':');
+        const isNewKey =
+          colonIndex !== -1 &&
+          !line.startsWith(' ') &&
+          !line.startsWith('\t') &&
+          !line.startsWith('- ');
+
+        if (isNewKey) {
+          saveCurrentField();
+          currentKey = line.slice(0, colonIndex).trim();
+          currentValueAccumulator = [line.slice(colonIndex + 1).trim()];
+        } else {
+          if (currentKey) {
+            currentValueAccumulator.push(line);
           }
         }
       });
+      saveCurrentField();
     }
   }
 
   // Fallback summary if not specified in frontmatter
   if (!summary) {
     const cleanText = content
-      .replace(/[#*`\-\[\]()]/g, '') // Strip markdown characters
+      .replace(/[#*`\-[\]()]/g, '') // Strip markdown characters
       .replace(/\s+/g, ' ')
       .trim();
     summary = cleanText.slice(0, 160) + '...';

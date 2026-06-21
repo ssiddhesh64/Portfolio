@@ -1,3 +1,24 @@
+---
+title: 'Why Mutable Objects Break HashSet: A Deep Dive into Java Hashing Internals'
+date: '2026-06-21'
+readTime: '7 min read'
+summary: "Discover why modifying objects after inserting them into a HashSet can lead to missing elements, failed lookups, and subtle production bugs. Learn how hashCode(), equals(), buckets, and Java's HashSet internals work together, and why immutability is critical for hash-based collections."
+tags:
+  [
+    'Java',
+    'HashSet',
+    'HashMap',
+    'Data Structures',
+    'Collections Framework',
+    'Java Internals',
+    'Backend Engineering',
+    'Software Engineering',
+    'Performance',
+  ]
+---
+
+# Why Mutable Objects Break HashSet
+
 Most Java developers use `HashSet` every day.
 
 ```java
@@ -147,7 +168,7 @@ After spreading the hash, a bucket is selected. Most developers think it uses mo
 bucket = (n - 1) & hash
 ```
 
-*(Where* `n` *is the number of buckets, e.g., 16).*
+_(Where_ `n` _is the number of buckets, e.g., 16)._
 
 Result:
 
@@ -292,7 +313,7 @@ As a result, the object becomes unreachable through normal lookup operations.
 
 ## Hash Collisions: LinkedLists and Red-Black Trees
 
-What if two *different* objects end up with the same bucket index? This is a **Hash Collision**.
+What if two _different_ objects end up with the same bucket index? This is a **Hash Collision**.
 
 Historically, `HashMap` resolved collisions by chaining objects in a `LinkedList` within that bucket. When searching, Java would traverse the list, calling `.equals()` on each element to find the right one.
 
@@ -300,7 +321,7 @@ However, a long `LinkedList` destroys the `O(1)` performance guarantee (turning 
 
 To fix this, Java 8 introduced a major optimization: **Tree Bins**. If a bucket's `LinkedList` grows beyond 8 elements (the `TREEIFY_THRESHOLD`), and the map has a minimum capacity of 64, Java converts that list into a **Red-Black Tree**. This restores worst-case performance from `O(N)` to `O(log N)`.
 
-*(This is another reason why your* `hashCode()` *and* `equals()` *implementations must be solid—and why elements should ideally implement* `Comparable` *when used heavily in HashMaps).*
+_(This is another reason why your_ `hashCode()` _and_ `equals()` _implementations must be solid—and why elements should ideally implement_ `Comparable` _when used heavily in HashMaps)._
 
 ---
 
@@ -334,16 +355,11 @@ Java expects the following rule to be respected:
 
 Violating this rule can cause:
 
-*   Failed lookups
-    
-*   Failed removals
-    
-*   Duplicate entries
-    
-*   Memory leaks
-    
-*   Difficult production bugs
-    
+- Failed lookups
+- Failed removals
+- Duplicate entries
+- Memory leaks
+- Difficult production bugs
 
 ---
 
@@ -456,14 +472,10 @@ However, this approach is easy to forget and therefore error-prone.
 
 The same issue applies to:
 
-*   HashMap keys
-    
-*   HashSet elements
-    
-*   ConcurrentHashMap keys
-    
-*   Hashtable keys
-    
+- HashMap keys
+- HashSet elements
+- ConcurrentHashMap keys
+- Hashtable keys
 
 In general:
 
