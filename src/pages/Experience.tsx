@@ -3,6 +3,65 @@ import { Briefcase, Calendar, MapPin } from 'lucide-react';
 import { experiences } from '../data/resumeData';
 import { useMetadata } from '../hooks/useMetadata';
 
+const highlightText = (text: string) => {
+  const keywords = [
+    'Java',
+    'Spring Boot',
+    'Python',
+    'Kafka',
+    'Azure',
+    'SAP HANA',
+    'React',
+    'React Native',
+    'C\\+\\+',
+    'C/C\\+\\+',
+    'SQLite',
+    'RESTful',
+    'Microservices',
+    'distributed systems',
+    '120K–180K requests/day',
+    '120 Peak TPS',
+    'p95 latency ~ 100 ms',
+    'p95 latency ~ 120 ms',
+    '15\\+ hours/week',
+    '40%',
+    '1M\\+ events/day',
+    '100K articles',
+    '10 weeks',
+    '21 GB',
+    'TF-IDF/BM25',
+    'multi-threaded',
+    'ThreadPool',
+  ];
+
+  const regex = new RegExp(
+    `\\b(${keywords.join('|')}|\\d+\\+?\\s*(?:K|M|TPS|ms|hours/week|events/day|GB|%|weeks|Peak TPS)?)\\b`,
+    'gi',
+  );
+
+  const tokens: React.ReactNode[] = [];
+  let lastIndex = 0;
+
+  text.replace(regex, (match, _, offset) => {
+    if (offset > lastIndex) {
+      tokens.push(text.substring(lastIndex, offset));
+    }
+    tokens.push(
+      <strong key={offset} className="bold-highlight">
+        {match}
+      </strong>,
+    );
+    lastIndex = offset + match.length;
+    return match;
+  });
+
+  if (lastIndex < text.length) {
+    tokens.push(text.substring(lastIndex));
+  }
+
+  return tokens.length > 0 ? tokens : text;
+};
+
 export const Experience: React.FC = () => {
   useMetadata({
     title: 'Siddhesh Sawant | Work Experience - Backend Engineering',
@@ -46,7 +105,7 @@ export const Experience: React.FC = () => {
 
                 <ul className="timeline-details">
                   {exp.details.map((detail, dIndex) => (
-                    <li key={dIndex}>{detail}</li>
+                    <li key={dIndex}>{highlightText(detail)}</li>
                   ))}
                 </ul>
               </div>

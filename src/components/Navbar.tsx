@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { Sun, Moon } from 'lucide-react';
 import { personalInfo } from '../data/resumeData';
 
@@ -22,24 +22,35 @@ export const Navbar: React.FC = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
-  const navItems = [
-    { label: 'Home', path: '/' },
-    { label: 'Experience', path: '/experience' },
-    { label: 'Projects', path: '/projects' },
-    { label: 'Education', path: '/education' },
+  const scanLinks = [
+    { label: 'Impact', href: '/#impact' },
+    { label: 'Experience', href: '/#experience' },
+    { label: 'Projects', href: '/#projects' },
+    { label: 'Skills', href: '/#skills' },
+  ];
+
+  const detailLinks = [
+    { label: 'All Projects', path: '/projects' },
     { label: 'Blog', path: '/blog' },
   ];
 
   return (
     <nav className="navbar">
       <div className="container nav-container">
-        <NavLink to="/" className="logo">
+        <Link to="/" className="logo">
           {personalInfo.name} {personalInfo.lastName}
-        </NavLink>
+        </Link>
 
         {/* Desktop Links */}
         <ul className="nav-links">
-          {navItems.map((item) => (
+          {scanLinks.map((item) => (
+            <li key={item.href}>
+              <a href={item.href} className="nav-link">
+                {item.label}
+              </a>
+            </li>
+          ))}
+          {detailLinks.map((item) => (
             <li key={item.path}>
               <NavLink
                 to={item.path}

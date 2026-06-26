@@ -32,6 +32,8 @@ export interface PersonalInfo {
   name: string;
   lastName: string;
   title: string;
+  location: string;
+  availability: string;
   mobile: string;
   email: string;
   github: string;
@@ -39,10 +41,32 @@ export interface PersonalInfo {
   summary: string;
 }
 
+export interface ImpactMetric {
+  value: string;
+  label: string;
+  context: string;
+  proof: string;
+}
+
+export interface PositioningPoint {
+  label: string;
+  description: string;
+}
+
+export interface ProofStory {
+  title: string;
+  subtitle: string;
+  metric: string;
+  description: string;
+  tags: string[];
+}
+
 export const personalInfo: PersonalInfo = {
   name: 'Siddhesh',
   lastName: 'Sawant',
   title: 'Software Engineer | Backend Developer',
+  location: 'Bangalore, India',
+  availability: 'Open to backend and platform engineering roles',
   mobile: '+91 8660911187',
   email: 'ssiddhesh64@gmail.com',
   github: 'https://github.com/ssiddhesh64',
@@ -50,6 +74,84 @@ export const personalInfo: PersonalInfo = {
   summary:
     'Backend Engineer with over 5 years of experience building and scaling high-performance microservices for large-scale e-commerce platforms. Expertise in Java, Spring Boot, Python, and event-driven architectures, with proven ownership in designing Kafka-based systems, improving system reliability, and delivering high-impact, customer-facing solutions.',
 };
+
+export const impactMetrics: ImpactMetric[] = [
+  {
+    value: '5+',
+    label: 'Years engineering',
+    context: 'Backend systems, APIs, automation, and production ownership.',
+    proof: 'Walmart Global Tech SDE2 plus freelance backend delivery.',
+  },
+  {
+    value: '180K',
+    label: 'Requests/day',
+    context: 'Scaled Spring Boot services for high-traffic commerce flows.',
+    proof: 'Production services at ~120 ms p95 latency.',
+  },
+  {
+    value: '1M+',
+    label: 'Events/day',
+    context: 'Kafka-based event pipelines for high-throughput processing.',
+    proof: 'Improved system throughput by 40%.',
+  },
+  {
+    value: '120',
+    label: 'Peak TPS',
+    context: 'Owned customer-facing service delivery end to end.',
+    proof: 'Maintained ~100 ms p95 latency.',
+  },
+  {
+    value: '15+',
+    label: 'Hours/week saved',
+    context: 'Automated operational workflows with Python.',
+    proof: 'Improved team productivity by 40%.',
+  },
+];
+
+export const positioningPoints: PositioningPoint[] = [
+  {
+    label: 'Backend scale',
+    description:
+      'Designs Java and Spring Boot microservices that handle real production traffic with latency and reliability targets.',
+  },
+  {
+    label: 'Event-driven systems',
+    description:
+      'Builds Kafka pipelines, scheduled ingestion jobs, and data flows where throughput and correctness matter.',
+  },
+  {
+    label: 'Operational leverage',
+    description:
+      'Turns repetitive workflows into automation that saves engineering time and reduces manual failure points.',
+  },
+];
+
+export const proofStories: ProofStory[] = [
+  {
+    title: 'Scaled commerce APIs',
+    subtitle: 'Walmart Global Tech',
+    metric: '180K req/day',
+    description:
+      'Built and optimized Spring Boot microservices for customer-facing commerce workloads with ~120 ms p95 latency.',
+    tags: ['Java', 'Spring Boot', 'Microservices', 'Latency'],
+  },
+  {
+    title: 'Built event pipelines',
+    subtitle: 'Walmart Global Tech',
+    metric: '1M+ events/day',
+    description:
+      'Designed Kafka-based pipelines that increased throughput by 40% and supported reliable downstream processing.',
+    tags: ['Kafka', 'Distributed Systems', 'Throughput'],
+  },
+  {
+    title: 'Automated operations',
+    subtitle: 'Walmart Global Tech',
+    metric: '15+ hrs/week',
+    description:
+      'Automated recurring workflows with Python, improving productivity by 40% and reducing manual operational load.',
+    tags: ['Python', 'Automation', 'Reliability'],
+  },
+];
 
 export const experiences: ExperienceItem[] = [
   {
