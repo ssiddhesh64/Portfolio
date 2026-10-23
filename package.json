@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && vite build --ssr src/entry-server.tsx --outDir dist-ssr && node scripts/prerender.mjs",
     "lint": "eslint .",
     "typecheck": "tsc -b",
+    "test:ui": "playwright test",
     "preview": "vite preview",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
@@ -17,6 +18,7 @@
     "@vercel/speed-insights": "^2.0.0",
     "lucide-react": "^1.21.0",
     "mermaid": "^11.15.0",
+    "playwright": "^1.64.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-markdown": "^10.1.0",

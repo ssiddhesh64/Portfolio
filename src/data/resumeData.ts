@@ -6,16 +6,6 @@ export interface ExperienceItem {
   details: string[];
 }
 
-export interface ProjectItem {
-  name: string;
-  tech: string;
-  date: string;
-  details: string[];
-  tags: string[];
-  githubUrl?: string;
-  demoUrl?: string;
-}
-
 export interface SkillCategory {
   category: string;
   items: string[];
@@ -64,15 +54,15 @@ export interface ProofStory {
 export const personalInfo: PersonalInfo = {
   name: 'Siddhesh',
   lastName: 'Sawant',
-  title: 'Software Engineer | Backend Developer',
-  location: 'Bangalore, India',
+  title: 'Backend Engineer · Java · Distributed Systems',
+  location: 'Mumbai, India',
   availability: 'Open to backend and platform engineering roles',
   mobile: '+91 8660911187',
   email: 'ssiddhesh64@gmail.com',
   github: 'https://github.com/ssiddhesh64',
   linkedin: 'https://www.linkedin.com/in/ssiddhesh64/',
   summary:
-    'Backend Engineer with over 5 years of experience building and scaling high-performance microservices for large-scale e-commerce platforms. Expertise in Java, Spring Boot, Python, and event-driven architectures, with proven ownership in designing Kafka-based systems, improving system reliability, and delivering high-impact, customer-facing solutions.',
+    "I'm a software engineer with 5+ years of experience building backend services at Walmart. I've worked with Java, Spring Boot, Kafka, and SQL, solving problems around API performance, data processing, and reliable services. Outside work, I explore systems engineering and machine learning, and write about the things I learn along the way.",
 };
 
 export const impactMetrics: ImpactMetric[] = [
@@ -85,7 +75,7 @@ export const impactMetrics: ImpactMetric[] = [
   {
     value: '180K',
     label: 'Requests/day',
-    context: 'Scaled Spring Boot services for high-traffic commerce flows.',
+    context: 'Scaled Spring Boot services for high-traffic e-commerce flows.',
     proof: 'Production services at ~120 ms p95 latency.',
   },
   {
@@ -110,29 +100,29 @@ export const impactMetrics: ImpactMetric[] = [
 
 export const positioningPoints: PositioningPoint[] = [
   {
-    label: 'Backend scale',
+    label: 'Backend engineering',
     description:
-      'Designs Java and Spring Boot microservices that handle real production traffic with latency and reliability targets.',
+      "I enjoy working on the parts of an application that users don't always see: APIs, database queries, event processing, and the logic that connects everything. I care about making services reliable, understandable, and straightforward to maintain.",
   },
   {
-    label: 'Event-driven systems',
+    label: 'Performance and reliability',
     description:
-      'Builds Kafka pipelines, scheduled ingestion jobs, and data flows where throughput and correctness matter.',
+      "A service that works locally is only the beginning. I'm interested in what happens under load, where bottlenecks come from, and how to diagnose problems using metrics, logs, and traces.",
   },
   {
-    label: 'Operational leverage',
+    label: 'Machine learning and AI',
     description:
-      'Turns repetitive workflows into automation that saves engineering time and reduces manual failure points.',
+      "I've also been spending time learning machine learning and building with LLMs. I want to understand how these systems work beyond the API call — from data preparation and retrieval to evaluation and practical applications.",
   },
 ];
 
 export const proofStories: ProofStory[] = [
   {
-    title: 'Scaled commerce APIs',
+    title: 'Scaled E-commerce APIs',
     subtitle: 'Walmart Global Tech',
     metric: '180K req/day',
     description:
-      'Built and optimized Spring Boot microservices for customer-facing commerce workloads with ~120 ms p95 latency.',
+      'Built and optimized Spring Boot microservices for customer-facing e-commerce workloads with ~120 ms p95 latency.',
     tags: ['Java', 'Spring Boot', 'Microservices', 'Latency'],
   },
   {
@@ -160,7 +150,7 @@ export const experiences: ExperienceItem[] = [
     duration: 'August 2020 - May 2025',
     location: 'Bangalore',
     details: [
-      'Developed scalable microservices using Java Spring Boot, handling 120K–180K requests/day with p95 latency ~ 120 ms for high traffic e-commerce systems.',
+      'Worked on backend services for an e-commerce platform, using Java and Spring Boot to implement business logic and support customer-facing functionality. My work involved APIs, data access, and the rules that determine how discounts are applied.',
       'Owned and delivered a customer-facing microservice end-to-end, handling 120 Peak TPS and p95 latency ~ 100 ms.',
       'Automated operational workflows using Python, saving 15+ hours/week of manual effort and improving team productivity by 40%.',
       'Designed and implemented Kafka-based event-driven pipelines processing 1M+ events/day, improving system throughput by 40%.',
@@ -173,9 +163,8 @@ export const experiences: ExperienceItem[] = [
     duration: 'August 2025 - Present',
     location: 'Remote',
     details: [
-      'Built scalable backend APIs using Spring Boot to manage appointment scheduling, slot availability, and booking workflows.',
-      'Developed RESTful APIs and microservices-based modules to support booking operations, customer management, and appointment tracking.',
-      'Improved operational efficiency and reduced booking conflicts by digitizing manual appointment scheduling.',
+      'Built a website for a driving school to move customer-facing information and parts of its manual workflow online.',
+      'Created a responsive React frontend and integrated WhatsApp to make it easier for customers to get in touch.',
     ],
   },
   {
@@ -190,85 +179,30 @@ export const experiences: ExperienceItem[] = [
   },
 ];
 
-export const projects: ProjectItem[] = [
-  {
-    name: 'Wikipedia Search Engine',
-    tech: 'Python | Information Retrieval',
-    date: 'November 2019',
-    details: [
-      'Developed an efficient Search Engine for a 21 GB Wikipedia dump.',
-      'Implemented multi-level inverted indexing to handle large data efficiently.',
-      'Integrated ranking algorithms (e.g., TF-IDF/BM25) to provide highly relevant search results.',
-      'Supported field-based queries and returned top 10 relevant results with optimized performance.',
-    ],
-    tags: ['Information Retrieval', 'Python', 'Systems'],
-  },
-  {
-    name: 'Mini Torrent File Sharing System',
-    tech: 'C++ | Socket Programming | Threading',
-    date: 'August 2019',
-    details: [
-      'Developed a peer-to-peer file sharing system in C++ enabling parallel downloads from multiple peers.',
-      'Improved download efficiency by allowing simultaneous chunk-based file transfers from multiple seeders.',
-    ],
-    tags: ['Systems', 'C++', 'Networking'],
-  },
-  {
-    name: 'Multi-threaded HTTP Server',
-    tech: 'C/C++ | Multi-threading',
-    date: 'January 2019',
-    details: [
-      'Built a multi-threaded HTTP server capable of handling concurrent client requests.',
-      'Designed a ThreadPool system to efficiently manage and assign worker threads.',
-      'Handled thread synchronization with conditional variables to serve multiple clients simultaneously.',
-    ],
-    tags: ['Systems', 'C/C++', 'Networking'],
-  },
-  {
-    name: 'Facebook Friend Recommendation',
-    tech: 'Python | Graph Mining | Machine Learning',
-    date: 'January 2020',
-    details: [
-      'Conducted exploratory data analysis based on directed follow-link statistics and mapped it to a binary classification problem.',
-      'Engineered about 50 graph features (e.g. Adamic-Adar, Jaccard coefficient) for the prediction model.',
-      'Used a non-linear machine learning model to achieve high performance on link prediction metrics.',
-    ],
-    tags: ['Machine Learning', 'Python'],
-  },
-  {
-    name: 'Mess Portal',
-    tech: 'Python | Flask | SQLite | HTML/CSS/JS',
-    date: 'June 2018',
-    details: [
-      'Developed a web portal enabling users to view, modify, or cancel meals for any allowed date.',
-      'Designed administrative panels to let mess administrators view analytics and change menus.',
-    ],
-    tags: ['Web', 'Python', 'Database'],
-  },
-];
-
 export const skills: SkillCategory[] = [
   {
-    category: 'Programming Languages',
-    items: ['Java', 'Python', 'C/C++', 'SQL', 'JavaScript', 'TypeScript'],
+    category: 'Languages',
+    items: ['Java', 'Python', 'SQL', 'JavaScript', 'TypeScript'],
   },
   {
-    category: 'Frameworks & Tech',
-    items: ['Spring Boot', 'Kafka', 'React', 'React Native', 'Flask'],
+    category: 'Backend',
+    items: ['Spring Boot', 'REST APIs', 'Microservices'],
   },
   {
-    category: 'Cloud & Infrastructure',
-    items: ['Azure Cloud', 'GCP', 'Docker', 'Kubernetes', 'Git'],
+    category: 'Messaging and data',
+    items: ['Kafka', 'Relational databases'],
   },
   {
-    category: 'Databases',
-    items: [
-      'PostgreSQL',
-      'Azure Cosmos DB',
-      'Elasticsearch',
-      'SQLite',
-      'SAP HANA',
-    ],
+    category: 'Frontend',
+    items: ['React', 'HTML', 'CSS'],
+  },
+  {
+    category: 'Engineering practices',
+    items: ['Testing', 'Debugging', 'Performance analysis', 'System design'],
+  },
+  {
+    category: 'Exploring',
+    items: ['Machine learning', 'LLMs', 'AI agents'],
   },
 ];
 

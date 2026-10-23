@@ -1,17 +1,11 @@
 import React, { Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { Navbar } from './components/Navbar';
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { Footer } from './components/Footer';
+import { Navbar } from './components/Navbar';
+import { Home } from './pages/Home';
 
-// Lazy load page components for automatic bundle code-splitting
-const Home = React.lazy(() =>
-  import('./pages/Home').then((m) => ({ default: m.Home })),
-);
 const Experience = React.lazy(() =>
   import('./pages/Experience').then((m) => ({ default: m.Experience })),
-);
-const Projects = React.lazy(() =>
-  import('./pages/Projects').then((m) => ({ default: m.Projects })),
 );
 const Education = React.lazy(() =>
   import('./pages/Education').then((m) => ({ default: m.Education })),
@@ -20,51 +14,62 @@ const Blog = React.lazy(() =>
   import('./pages/Blog').then((m) => ({ default: m.Blog })),
 );
 
-const App: React.FC = () => {
-  return (
-    <Router>
-      <div
-        style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}
-      >
-        <Navbar />
-        <main style={{ flex: 1 }}>
-          <Suspense
-            fallback={
-              <div
-                className="flex-center"
-                style={{
-                  minHeight: '60vh',
-                  flexDirection: 'column',
-                  gap: '1rem',
-                }}
-              >
-                <div className="shimmer-spinner" />
-                <p
-                  style={{
-                    color: 'var(--text-secondary)',
-                    fontWeight: '500',
-                    fontSize: '0.95rem',
-                  }}
-                >
-                  Loading page...
-                </p>
-              </div>
-            }
+const SiteFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+    <a className="skip-link" href="#main-content">
+      Skip to content
+    </a>
+    <Navbar />
+    <main id="main-content" style={{ flex: 1 }}>
+      {children}
+    </main>
+    <Footer />
+  </div>
+);
+
+export const HomeDocument: React.FC = () => (
+  <SiteFrame>
+    <Home />
+  </SiteFrame>
+);
+
+const OtherPages: React.FC = () => (
+  <SiteFrame>
+    <Suspense
+      fallback={
+        <div
+          className="flex-center"
+          style={{ minHeight: '60vh', flexDirection: 'column', gap: '1rem' }}
+        >
+          <div className="shimmer-spinner" />
+          <p
+            style={{
+              color: 'var(--text-secondary)',
+              fontWeight: '500',
+              fontSize: '0.95rem',
+            }}
           >
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/experience" element={<Experience />} />
-              <Route path="/projects" element={<Projects />} />
-              <Route path="/education" element={<Education />} />
-              <Route path="/blog" element={<Blog />} />
-              <Route path="/blog/:id" element={<Blog />} />
-            </Routes>
-          </Suspense>
-        </main>
-        <Footer />
-      </div>
-    </Router>
-  );
-};
+            Loading page...
+          </p>
+        </div>
+      }
+    >
+      <Outlet />
+    </Suspense>
+  </SiteFrame>
+);
+
+const App: React.FC = () => (
+  <Routes>
+    <Route path="/" element={<HomeDocument />} />
+    <Route element={<OtherPages />}>
+      <Route path="/experience" element={<Experience />} />
+      <Route path="/education" element={<Education />} />
+      <Route path="/blog" element={<Blog />} />
+      <Route path="/blog/:id" element={<Blog />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Route>
+  </Routes>
+);
 
 export default App;

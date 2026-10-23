@@ -7,7 +7,7 @@ export const Education: React.FC = () => {
   useMetadata({
     title: 'Siddhesh Sawant | Education & Technical Skills',
     description:
-      'Academic qualifications, honors, and technical skill sets of Siddhesh Sawant in core computer science, systems design, backend languages, databases, and DevOps.',
+      "My academic background gave me a foundation in computer science and software development. Since then, I've continued learning through professional work, independent study, and technical writing.",
   });
 
   return (
@@ -15,8 +15,9 @@ export const Education: React.FC = () => {
       <header className="page-header container">
         <h1>Education & Skills</h1>
         <p>
-          My academic foundation in computer science, honors degrees, and
-          specialized technical skill sets.
+          My academic background gave me a foundation in computer science and
+          software development. Since then, I've continued learning through
+          professional work, independent study, and technical writing.
         </p>
       </header>
 
@@ -52,7 +53,7 @@ export const Education: React.FC = () => {
 
         {/* Technical Strengths Section */}
         <section className="skills-section">
-          <h2 className="skills-title">Technical Skills Summary</h2>
+          <h2 className="skills-title">Technologies I work with</h2>
 
           <div className="skills-grid">
             {skills.map((category, index) => (

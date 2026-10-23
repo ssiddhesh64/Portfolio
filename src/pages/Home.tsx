@@ -1,114 +1,61 @@
-import React, { useMemo, useState } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
-import {
-  ArrowRight,
-  Code2,
-  ExternalLink,
-  Mail,
-  MapPin,
-  Phone,
-  Sparkles,
-} from 'lucide-react';
+import { ArrowRight, ExternalLink, Mail, MapPin } from 'lucide-react';
 import { ExperienceSnapshot } from '../components/ExperienceSnapshot';
-import { ImpactMetricCard } from '../components/ImpactMetricCard';
-import { ProjectProofCard } from '../components/ProjectProofCard';
 import { SectionHeading } from '../components/SectionHeading';
 import { SkillCluster } from '../components/SkillCluster';
 import {
   education,
   experiences,
-  impactMetrics,
   personalInfo,
   positioningPoints,
-  projects,
-  proofStories,
   skills,
 } from '../data/resumeData';
 import { useMetadata } from '../hooks/useMetadata';
 
-const projectFilters = [
-  'All',
-  'Systems',
-  'Information Retrieval',
-  'Networking',
-  'Machine Learning',
-];
-
 export const Home: React.FC = () => {
   useMetadata({
-    title:
-      'Siddhesh Sawant | Backend Engineer | Microservices & Distributed Systems',
-    description:
-      'Fast-scan portfolio for Siddhesh Sawant, a backend engineer with 5+ years of experience scaling Spring Boot microservices, Kafka pipelines, and production systems.',
+    title: 'Siddhesh Sawant | Backend Engineer',
+    description: personalInfo.summary,
   });
-
-  const [activeMetricIndex, setActiveMetricIndex] = useState(0);
-  const [activeProjectFilter, setActiveProjectFilter] = useState('All');
-
-  const filteredProjects = useMemo(() => {
-    if (activeProjectFilter === 'All') {
-      return projects.slice(0, 4);
-    }
-
-    return projects.filter((project) =>
-      project.tags.some(
-        (tag) => tag.toLowerCase() === activeProjectFilter.toLowerCase(),
-      ),
-    );
-  }, [activeProjectFilter]);
-
-  const activeMetric = impactMetrics[activeMetricIndex];
 
   return (
     <div className="page-wrapper scan-page">
       <section id="snapshot" className="scan-hero">
         <div className="container scan-hero-grid">
           <div className="scan-hero-copy">
-            <span className="hero-welcome">
-              Backend engineer for scale-heavy systems
-            </span>
+            <span className="hero-welcome">{personalInfo.title}</span>
             <h1>
               {personalInfo.name} {personalInfo.lastName}
             </h1>
-            <p className="scan-hero-lede">
-              I build Spring Boot microservices, Kafka pipelines, and automation
-              that keep high-traffic product systems fast, reliable, and easier
-              to operate.
-            </p>
-
-            <div className="hero-proof-strip" aria-label="Career proof summary">
-              <span>Ex-Walmart SDE2</span>
-              <span>5+ years</span>
-              <span>180K req/day</span>
-              <span>1M+ events/day</span>
-            </div>
+            <p className="scan-hero-lede">{personalInfo.summary}</p>
 
             <div className="hero-buttons">
-              <a
-                href={`mailto:${personalInfo.email}`}
-                className="btn btn-primary"
-              >
-                <Mail size={18} />
-                Contact me
+              <a href="#experience" className="btn btn-primary">
+                Explore my experience <ArrowRight size={18} />
               </a>
-              <a
-                href={personalInfo.linkedin}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-secondary"
+              <Link to="/blog" className="btn btn-secondary">
+                Read my blog
+              </Link>
+              <div
+                className="hero-social-links"
+                aria-label="Professional profiles"
               >
-                <ExternalLink size={18} />
-                LinkedIn
-              </a>
-              <a
-                href={personalInfo.github}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-secondary"
-              >
-                <Code2 size={18} />
-                GitHub
-              </a>
+                <a
+                  href={personalInfo.linkedin}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  LinkedIn <ExternalLink size={14} />
+                </a>
+                <a
+                  href={personalInfo.github}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  GitHub <ExternalLink size={14} />
+                </a>
+              </div>
             </div>
           </div>
 
@@ -119,76 +66,32 @@ export const Home: React.FC = () => {
             </div>
             <dl className="quick-facts">
               <div>
-                <dt>Role</dt>
-                <dd>{personalInfo.title}</dd>
+                <dt>Experience</dt>
+                <dd>5+ years in software engineering</dd>
               </div>
               <div>
-                <dt>Location</dt>
+                <dt>Based in</dt>
                 <dd>
                   <MapPin size={14} />
                   {personalInfo.location}
                 </dd>
               </div>
               <div>
-                <dt>Best fit</dt>
-                <dd>Backend, platform, distributed systems</dd>
+                <dt>Focus</dt>
+                <dd>Backend development, distributed systems, and APIs</dd>
               </div>
               <div>
-                <dt>Strongest stack</dt>
-                <dd>Java, Spring Boot, Kafka, Python, SQL</dd>
+                <dt>Currently exploring</dt>
+                <dd>Machine learning and LLM applications</dd>
               </div>
             </dl>
-            <div className="profile-contact-row">
-              <a href={`tel:${personalInfo.mobile}`}>
-                <Phone size={16} />
-                Call
-              </a>
-              <a href={`mailto:${personalInfo.email}`}>
-                <Mail size={16} />
-                Email
-              </a>
-            </div>
           </aside>
-        </div>
-      </section>
-
-      <section id="impact" className="scan-section impact-section">
-        <div className="container">
-          <SectionHeading
-            eyebrow="Impact"
-            title="The important numbers, with proof attached."
-            description="Click a metric to see the exact signal a hiring manager should remember."
-            align="center"
-          />
-
-          <div className="impact-grid">
-            {impactMetrics.map((metric, index) => (
-              <ImpactMetricCard
-                key={metric.label}
-                metric={metric}
-                isActive={activeMetricIndex === index}
-                onSelect={() => setActiveMetricIndex(index)}
-              />
-            ))}
-          </div>
-
-          <div className="metric-proof-panel">
-            <Sparkles size={20} />
-            <div>
-              <span>{activeMetric.label}</span>
-              <p>{activeMetric.proof}</p>
-            </div>
-          </div>
         </div>
       </section>
 
       <section id="fit" className="scan-section">
         <div className="container">
-          <SectionHeading
-            eyebrow="Positioning"
-            title="What I am strongest at"
-            description="A quick read of where I create the most engineering value."
-          />
+          <SectionHeading title="What I enjoy working on" />
 
           <div className="positioning-grid">
             {positioningPoints.map((point) => (
@@ -202,12 +105,12 @@ export const Home: React.FC = () => {
       </section>
 
       <section id="experience" className="scan-section muted-section">
-        <div className="container scan-two-column">
+        <div className="container">
           <div>
             <SectionHeading
               eyebrow="Experience"
-              title="Career timeline, compressed for fast decisions."
-              description="Each role starts with the outcome, then expands only when a viewer wants the detail."
+              title="Work I've done"
+              description="My experience includes backend engineering at Walmart and freelance software development. I've worked on production services and smaller client engagements, handling the implementation and working directly with clients."
             />
             <div className="experience-stack">
               {experiences.map((experience, index) => (
@@ -219,59 +122,6 @@ export const Home: React.FC = () => {
               ))}
             </div>
           </div>
-
-          <aside className="proof-story-rail">
-            <h3>Proof cards</h3>
-            {proofStories.map((story) => (
-              <article key={story.title} className="proof-story-card">
-                <span>{story.metric}</span>
-                <h4>{story.title}</h4>
-                <p className="proof-story-subtitle">{story.subtitle}</p>
-                <p>{story.description}</p>
-                <div className="skill-pill-list">
-                  {story.tags.map((tag) => (
-                    <span key={tag} className="skill-pill compact">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </article>
-            ))}
-          </aside>
-        </div>
-      </section>
-
-      <section id="projects" className="scan-section">
-        <div className="container">
-          <div className="section-header-row">
-            <SectionHeading
-              eyebrow="Projects"
-              title="Selected technical proof"
-              description="Projects that show systems thinking, data structures, networking, and backend fundamentals."
-            />
-            <Link to="/projects" className="text-link">
-              Full project archive <ArrowRight size={16} />
-            </Link>
-          </div>
-
-          <div className="filter-bar left-aligned">
-            {projectFilters.map((filter) => (
-              <button
-                key={filter}
-                type="button"
-                className={`filter-btn ${activeProjectFilter === filter ? 'active' : ''}`}
-                onClick={() => setActiveProjectFilter(filter)}
-              >
-                {filter}
-              </button>
-            ))}
-          </div>
-
-          <div className="project-proof-grid">
-            {filteredProjects.map((project) => (
-              <ProjectProofCard key={project.name} project={project} />
-            ))}
-          </div>
         </div>
       </section>
 
@@ -279,8 +129,8 @@ export const Home: React.FC = () => {
         <div className="container">
           <SectionHeading
             eyebrow="Skills"
-            title="Stack map"
-            description="Grouped by how the skills are used in real systems, not shown as arbitrary percentages."
+            title="Technologies I work with"
+            description="These are technologies and engineering practices I've used in my work, grouped by what I use them for."
             align="center"
           />
           <div className="skill-cluster-grid">
@@ -298,8 +148,8 @@ export const Home: React.FC = () => {
         <div className="container education-scan-grid">
           <SectionHeading
             eyebrow="Education"
-            title="Academic foundation"
-            description="Computer science depth plus engineering fundamentals."
+            title="Education"
+            description="My academic background gave me a foundation in computer science and software development. Since then, I've continued learning through professional work, independent study, and technical writing."
           />
           <div className="education-card-list">
             {education.map((item) => (
@@ -318,10 +168,14 @@ export const Home: React.FC = () => {
         <div className="container contact-band-inner">
           <div>
             <span className="section-eyebrow">Contact</span>
-            <h2>Need a backend engineer who can own production systems?</h2>
+            <h2>Let's talk</h2>
             <p>
-              I am easiest to evaluate through impact: scale handled, latency
-              maintained, workflows automated, and systems shipped.
+              I'm interested in backend engineering opportunities where I can
+              contribute to real products, solve technical problems, and keep
+              growing as an engineer. I'm also open to freelance work that is
+              a good fit for my experience. If you're
+              working on something interesting or think my background could be a
+              fit for your team, feel free to reach out.
             </p>
           </div>
           <div className="contact-actions">
@@ -330,7 +184,7 @@ export const Home: React.FC = () => {
               className="btn btn-primary"
             >
               <Mail size={18} />
-              Email
+              Email me
             </a>
             <a
               href={personalInfo.linkedin}
@@ -339,14 +193,7 @@ export const Home: React.FC = () => {
               className="btn btn-secondary"
             >
               <ExternalLink size={18} />
-              LinkedIn
-            </a>
-            <a
-              href={`tel:${personalInfo.mobile}`}
-              className="btn btn-secondary"
-            >
-              <Phone size={18} />
-              Call
+              Connect on LinkedIn
             </a>
           </div>
         </div>

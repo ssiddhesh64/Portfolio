@@ -1,0 +1,113 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+/*
+ * Site-wide design tokens.
+ * Update the palette and font stacks here; components consume the semantic
+ * variables below instead of choosing their own colors.
+ */
+:root {
+  /* Google Fonts loaded by the import above */
+  --font-heading: 'Manrope', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-code: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Shared layout and type scale */
+  --layout-max-width: 1120px;
+  --page-gutter: clamp(1.25rem, 4vw, 2.5rem);
+  --section-space: clamp(3.75rem, 7vw, 5.5rem);
+  --type-xs: 0.75rem;
+  --type-sm: 0.875rem;
+  --type-base: 1rem;
+  --type-lead: 1.125rem;
+  --type-h3: 1.25rem;
+  --type-h2: clamp(1.75rem, 3vw, 2.25rem);
+  --type-h1: clamp(2.5rem, 5vw, 3.75rem);
+  --type-display: clamp(3rem, 7vw, 5.5rem);
+
+  /* Light palette */
+  --color-background: #f5f5f7;
+  --color-surface: #ffffff;
+  --color-text: #1d1d1f;
+  --color-primary: #0066cc;
+  --color-secondary: #637f99;
+  --color-accent: #e1eaf2;
+  --color-border: #d0d0d0;
+  --color-on-primary: #ffffff;
+  --color-success: #456789;
+  --color-error: #b42318;
+  --color-error-soft: rgba(180, 35, 24, 0.06);
+  --color-shadow-soft: rgba(0, 0, 0, 0.05);
+  --color-shadow-medium: rgba(0, 0, 0, 0.15);
+  --color-shadow-strong: rgba(0, 0, 0, 0.2);
+
+  /* Semantic aliases used by the existing components */
+  --bg-primary: var(--color-background);
+  --bg-secondary: var(--color-accent);
+  --bg-tertiary: var(--color-border);
+  --text-primary: var(--color-text);
+  --text-secondary: #4f5962;
+  --text-muted: #5e6871;
+  --accent: var(--color-primary);
+  --accent-glow: rgba(69, 103, 137, 0.12);
+  --accent-hover: #355575;
+  --accent-gradient: var(--color-primary);
+  --accent-secondary: var(--color-secondary);
+  --accent-secondary-glow: rgba(69, 103, 137, 0.1);
+  --accent-success: var(--color-success);
+  --accent-success-glow: rgba(69, 103, 137, 0.12);
+  --accent-warm: #526575;
+  --code-background: #17212b;
+  --code-text: #e8edf2;
+  --code-comment: #a8b3bf;
+  --code-keyword: #d2a8ff;
+  --code-string: #a5d6a7;
+  --code-function: #91c4ff;
+  --code-number: #f6c177;
+  --code-operator: #89ddff;
+  --code-line-number: #7c8996;
+  --code-border: #334252;
+  --card-bg: var(--color-surface);
+  --card-border: var(--color-border);
+  --card-hover-border: rgba(69, 103, 137, 0.4);
+  --card-shadow: none;
+  --nav-bg: rgba(245, 245, 247, 0.96);
+  --nav-border: var(--color-border);
+  --border-radius-sm: 4px;
+  --border-radius-md: 6px;
+  --border-radius-lg: 8px;
+  --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dark-theme {
+  --color-background: #1f211e;
+  --color-surface: #242621;
+  --color-text: #f4f1e9;
+  --color-primary: #df987d;
+  --color-secondary: #a7b19a;
+  --color-accent: #282b26;
+  --color-border: #41443c;
+  --color-on-primary: #1f211e;
+  --color-success: #a7b19a;
+  --color-error: #ff8f85;
+  --color-error-soft: rgba(255, 143, 133, 0.08);
+
+  --text-secondary: #c6cbd2;
+  --text-muted: #aeb7c1;
+  --accent-glow: rgba(223, 152, 125, 0.14);
+  --accent-hover: #efb19a;
+  --accent-secondary-glow: rgba(167, 177, 154, 0.12);
+  --accent-warm: #d0ae7f;
+  --code-background: #111820;
+  --code-text: #e8edf2;
+  --code-comment: #aeb7c1;
+  --code-keyword: #d2a8ff;
+  --code-string: #a5d6a7;
+  --code-function: #91c4ff;
+  --code-number: #f6c177;
+  --code-operator: #89ddff;
+  --code-line-number: #83909d;
+  --code-border: #354454;
+  --card-hover-border: rgba(223, 152, 125, 0.55);
+  --nav-bg: rgba(31, 33, 30, 0.97);
+}

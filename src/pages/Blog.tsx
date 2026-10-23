@@ -1,16 +1,129 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock, Calendar, Tag, BookOpen } from 'lucide-react';
+import { ArrowLeft, Clock, Calendar, BookOpen } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import {
-  oneDark,
-  oneLight,
-} from 'react-syntax-highlighter/dist/esm/styles/prism';
-import mermaid from 'mermaid';
 import { blogPosts } from '../data/blogData';
 import { useMetadata } from '../hooks/useMetadata';
+import { personalInfo } from '../data/resumeData';
+
+const SyntaxHighlighter = React.lazy(() =>
+  import('react-syntax-highlighter').then(({ Prism }) => ({ default: Prism })),
+);
+
+const codeTheme = (): Record<string, React.CSSProperties> => {
+  const colors = {
+    comment: 'var(--code-comment)',
+    keyword: 'var(--code-keyword)',
+    string: 'var(--code-string)',
+    function: 'var(--code-function)',
+    number: 'var(--code-number)',
+    operator: 'var(--code-operator)',
+    text: 'var(--code-text)',
+  };
+
+  return {
+    'pre[class*="language-"]': {
+      color: colors.text,
+      background: 'var(--code-background)',
+      fontFamily: 'var(--font-code)',
+      fontSize: '0.84rem',
+      lineHeight: 1.75,
+      margin: 0,
+      padding: '1.15rem 1.25rem',
+      tabSize: 2,
+      whiteSpace: 'pre',
+    },
+    'code[class*="language-"]': {
+      color: colors.text,
+      background: 'transparent',
+      fontFamily: 'var(--font-code)',
+      textShadow: 'none',
+      whiteSpace: 'pre',
+    },
+    comment: { color: colors.comment, fontStyle: 'italic' },
+    prolog: { color: colors.comment },
+    doctype: { color: colors.comment },
+    cdata: { color: colors.comment },
+    punctuation: { color: '#c4ced8' },
+    property: { color: colors.function },
+    tag: { color: colors.function },
+    boolean: { color: colors.number },
+    constant: { color: colors.number },
+    symbol: { color: colors.number },
+    deleted: { color: '#ff9b9b' },
+    selector: { color: colors.keyword },
+    'attr-name': { color: colors.function },
+    string: { color: colors.string },
+    char: { color: colors.string },
+    builtin: { color: colors.function },
+    inserted: { color: colors.string },
+    operator: { color: colors.operator },
+    entity: { color: colors.operator, cursor: 'help' },
+    url: { color: colors.string },
+    variable: { color: colors.text },
+    atrule: { color: colors.keyword },
+    'attr-value': { color: colors.string },
+    function: { color: colors.function },
+    'class-name': { color: '#f2cc60' },
+    regex: { color: colors.string },
+    important: { color: colors.keyword, fontWeight: 'bold' },
+    keyword: { color: colors.keyword },
+  };
+};
+
+const getHeadingId = (heading: string) =>
+  heading
+    .replace(/[`*_~]/g, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .trim()
+    .replace(/\s+/g, '-');
+
+const getPostHeadings = (content: string) =>
+  [...content.matchAll(/^##\s+(.+)$/gm)].map(([, title]) => ({
+    title: title.replace(/[`*_~]/g, '').trim(),
+    id: getHeadingId(title),
+  }));
+
+const getNodeText = (node: React.ReactNode): string =>
+  React.Children.toArray(node)
+    .map((child) => {
+      if (typeof child === 'string' || typeof child === 'number') {
+        return String(child);
+      }
+      if (React.isValidElement<{ children?: React.ReactNode }>(child)) {
+        return getNodeText(child.props.children);
+      }
+      return '';
+    })
+    .join('');
+
+const visibleTags = (tags: string[], limit = 3) => ({
+  shown: tags.slice(0, limit),
+  remaining: Math.max(0, tags.length - limit),
+});
+
+const TopicChips: React.FC<{ tags: string[] }> = ({ tags }) => {
+  const { shown, remaining } = visibleTags(tags);
+  return (
+    <div className="badge-container">
+      {shown.map((tag) => (
+        <span key={tag} className="badge">
+          {tag}
+        </span>
+      ))}
+      {remaining > 0 && (
+        <span
+          className="badge badge-overflow"
+          aria-label={`${remaining} more topics`}
+        >
+          +{remaining}
+        </span>
+      )}
+    </div>
+  );
+};
 
 // Copy Button Component for Code Blocks
 const CopyButton: React.FC<{ code: string }> = ({ code }) => {
@@ -28,9 +141,12 @@ const CopyButton: React.FC<{ code: string }> = ({ code }) => {
 
   return (
     <button
+      type="button"
       onClick={handleCopy}
       className="code-block-copy-btn"
       title="Copy code"
+      aria-label={copied ? 'Code copied' : 'Copy code to clipboard'}
+      aria-live="polite"
     >
       {copied ? 'Copied!' : 'Copy'}
     </button>
@@ -55,16 +171,19 @@ const Mermaid: React.FC<{ chart: string; isDark: boolean }> = ({
 
     const renderChart = async () => {
       try {
+        const { default: mermaid } = await import('mermaid');
+        const styles = getComputedStyle(document.documentElement);
+        const color = (token: string) => styles.getPropertyValue(token).trim();
         mermaid.initialize({
           startOnLoad: false,
           theme: isDark ? 'dark' : 'default',
-          securityLevel: 'loose',
-          fontFamily: 'Inter, sans-serif',
+          securityLevel: 'strict',
+          fontFamily: color('--font-body'),
           themeVariables: {
-            background: isDark ? '#1a1f2c' : '#ffffff',
-            primaryColor: isDark ? '#6366f1' : '#3b82f6',
-            primaryTextColor: isDark ? '#f3f4f6' : '#1f2937',
-            lineColor: isDark ? '#4b5563' : '#d1d5db',
+            background: color('--bg-primary'),
+            primaryColor: color('--accent'),
+            primaryTextColor: color('--text-primary'),
+            lineColor: color('--card-border'),
           },
         });
 
@@ -119,6 +238,7 @@ export const Blog: React.FC = () => {
   }, []);
 
   const post = id ? blogPosts.find((p) => p.id === id) : undefined;
+  const postHeadings = post ? getPostHeadings(post.content) : [];
 
   const metaTitle = post
     ? `${post.title} | Siddhesh Sawant`
@@ -152,6 +272,25 @@ export const Blog: React.FC = () => {
     return (
       <div className="page-wrapper">
         <article className="blog-post-view container">
+          <script type="application/ld+json">
+            {JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'Article',
+              headline: post.title,
+              description: post.summary,
+              datePublished: post.date,
+              author: {
+                '@type': 'Person',
+                name: `${personalInfo.name} ${personalInfo.lastName}`,
+                url: 'https://siddheshsawant.in',
+              },
+              mainEntityOfPage: `https://siddheshsawant.in/blog/${post.id}`,
+              publisher: {
+                '@type': 'Person',
+                name: `${personalInfo.name} ${personalInfo.lastName}`,
+              },
+            })}
+          </script>
           <button
             onClick={() => navigate('/blog')}
             className="btn btn-secondary btn-back"
@@ -168,25 +307,59 @@ export const Blog: React.FC = () => {
               <Clock size={14} />
               {post.readTime}
             </span>
+            <span>
+              By {personalInfo.name} {personalInfo.lastName}
+            </span>
           </div>
 
           <h1 className="blog-post-title">{post.title}</h1>
 
           <div className="blog-post-tags">
-            {post.tags.map((tag, idx) => (
-              <span key={idx} className="badge icon-flex-align">
-                <Tag size={12} /> {tag}
-              </span>
-            ))}
+            <TopicChips tags={post.tags} />
           </div>
+
+          {postHeadings.length >= 8 && (
+            <nav className="blog-toc" aria-label="Table of contents">
+              <h2>On this page</h2>
+              <ol>
+                {postHeadings.map((heading) => (
+                  <li key={heading.id}>
+                    <a href={`#${heading.id}`}>{heading.title}</a>
+                  </li>
+                ))}
+              </ol>
+            </nav>
+          )}
 
           <div className="blog-post-content">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
+                h2({ children, ...props }) {
+                  const headingText = getNodeText(children);
+                  return (
+                    <h2 id={getHeadingId(headingText)} {...props}>
+                      {children}
+                    </h2>
+                  );
+                },
+                h1({ children, ...props }) {
+                  const headingText = getNodeText(children);
+                  return (
+                    <h2
+                      className="blog-content-title"
+                      id={getHeadingId(headingText)}
+                      {...props}
+                    >
+                      {children}
+                    </h2>
+                  );
+                },
                 code(props) {
                   const { children, className, ...rest } = props;
-                  const match = /language-(\w+)/.exec(className || '');
+                  const match = /language-([a-zA-Z0-9_+#.-]+)/.exec(
+                    className || '',
+                  );
                   const language = match ? match[1] : '';
 
                   if (!match) {
@@ -209,21 +382,38 @@ export const Blog: React.FC = () => {
                         <span className="code-block-lang">{language}</span>
                         <CopyButton code={codeString} />
                       </div>
-                      <SyntaxHighlighter
-                        PreTag="div"
-                        language={language}
-                        style={isDark ? oneDark : oneLight}
-                        customStyle={{
-                          margin: 0,
-                          borderTopLeftRadius: 0,
-                          borderTopRightRadius: 0,
-                          borderBottomLeftRadius: 'var(--border-radius-sm)',
-                          borderBottomRightRadius: 'var(--border-radius-sm)',
-                          fontSize: '0.9rem',
-                        }}
+                      <React.Suspense
+                        fallback={
+                          <pre className="code-block-fallback">
+                            <code>{codeString}</code>
+                          </pre>
+                        }
                       >
-                        {codeString}
-                      </SyntaxHighlighter>
+                        <SyntaxHighlighter
+                          PreTag="pre"
+                          language={language}
+                          style={codeTheme()}
+                          showLineNumbers
+                          lineNumberStyle={{
+                            color: 'var(--code-line-number)',
+                            minWidth: '2.5em',
+                            paddingRight: '1.25em',
+                            userSelect: 'none',
+                          }}
+                          wrapLongLines={false}
+                          customStyle={{
+                            margin: 0,
+                            background: 'var(--code-background)',
+                            color: 'var(--code-text)',
+                            fontFamily: 'var(--font-code)',
+                            fontSize: '0.84rem',
+                            lineHeight: 1.75,
+                            padding: '1.15rem 1.25rem',
+                          }}
+                        >
+                          {codeString}
+                        </SyntaxHighlighter>
+                      </React.Suspense>
                     </div>
                   );
                 },
@@ -250,10 +440,10 @@ export const Blog: React.FC = () => {
 
       <div className="container blog-container">
         {blogPosts.map((post) => (
-          <div
+          <Link
             key={post.id}
+            to={`/blog/${post.id}`}
             className="glass-card blog-card scroll-reveal"
-            onClick={() => navigate(`/blog/${post.id}`)}
           >
             <div className="blog-meta">
               <span className="icon-flex-align">
@@ -270,19 +460,13 @@ export const Blog: React.FC = () => {
             <p className="blog-summary">{post.summary}</p>
 
             <div className="blog-card-footer">
-              <div className="badge-container">
-                {post.tags.map((tag, idx) => (
-                  <span key={idx} className="badge">
-                    {tag}
-                  </span>
-                ))}
-              </div>
+              <TopicChips tags={post.tags} />
 
               <span className="blog-read-more">
                 Read Article <BookOpen size={16} />
               </span>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
     </div>

@@ -9,11 +9,11 @@ interface ExperienceSnapshotProps {
 
 const getLeadResult = (experience: ExperienceItem, index: number) => {
   if (index === 0) {
-    return 'Scaled backend services to 180K requests/day, 1M+ daily events, and ~120 ms p95 latency.';
+    return 'Built backend services for an e-commerce platform, from API and data access work to customer-facing discount logic.';
   }
 
   if (experience.org === 'Royal Motors') {
-    return 'Digitized appointment booking workflows with Spring Boot APIs and conflict-aware scheduling.';
+    return 'Built a responsive website for a driving school, including a React frontend and WhatsApp contact integration.';
   }
 
   return 'Built a React Native telemetry app backed by SAP HANA for enterprise POS device visibility.';

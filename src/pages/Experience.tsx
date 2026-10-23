@@ -3,79 +3,65 @@ import { Briefcase, Calendar, MapPin } from 'lucide-react';
 import { experiences } from '../data/resumeData';
 import { useMetadata } from '../hooks/useMetadata';
 
+const highlightTerms = [
+  'p95 latency ~ 100 ms',
+  '15+ hours/week',
+  '1M+ events/day',
+  '100K articles',
+  'Spring Boot',
+  'React Native',
+  '120 Peak TPS',
+  'SAP HANA',
+  'Azure Cloud',
+  'Java',
+  'Python',
+  'Kafka',
+].sort((a, b) => b.length - a.length);
+
+const escapeRegExp = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const highlightText = (text: string) => {
-  const keywords = [
-    'Java',
-    'Spring Boot',
-    'Python',
-    'Kafka',
-    'Azure',
-    'SAP HANA',
-    'React',
-    'React Native',
-    'C\\+\\+',
-    'C/C\\+\\+',
-    'SQLite',
-    'RESTful',
-    'Microservices',
-    'distributed systems',
-    '120K–180K requests/day',
-    '120 Peak TPS',
-    'p95 latency ~ 100 ms',
-    'p95 latency ~ 120 ms',
-    '15\\+ hours/week',
-    '40%',
-    '1M\\+ events/day',
-    '100K articles',
-    '10 weeks',
-    '21 GB',
-    'TF-IDF/BM25',
-    'multi-threaded',
-    'ThreadPool',
-  ];
-
+  const alternatives = highlightTerms.map(escapeRegExp).join('|');
   const regex = new RegExp(
-    `\\b(${keywords.join('|')}|\\d+\\+?\\s*(?:K|M|TPS|ms|hours/week|events/day|GB|%|weeks|Peak TPS)?)\\b`,
-    'gi',
+    `(?<![\\p{L}\\p{N}_])(?:${alternatives})(?![\\p{L}\\p{N}_])`,
+    'giu',
   );
-
   const tokens: React.ReactNode[] = [];
-  let lastIndex = 0;
+  let cursor = 0;
 
-  text.replace(regex, (match, _, offset) => {
-    if (offset > lastIndex) {
-      tokens.push(text.substring(lastIndex, offset));
-    }
+  for (const match of text.matchAll(regex)) {
+    const value = match[0];
+    const start = match.index ?? cursor;
+    if (start > cursor) tokens.push(text.slice(cursor, start));
     tokens.push(
-      <strong key={offset} className="bold-highlight">
-        {match}
+      <strong key={`${start}-${value}`} className="bold-highlight">
+        {value}
       </strong>,
     );
-    lastIndex = offset + match.length;
-    return match;
-  });
-
-  if (lastIndex < text.length) {
-    tokens.push(text.substring(lastIndex));
+    cursor = start + value.length;
   }
 
+  if (cursor < text.length) tokens.push(text.slice(cursor));
   return tokens.length > 0 ? tokens : text;
 };
 
 export const Experience: React.FC = () => {
   useMetadata({
-    title: 'Siddhesh Sawant | Work Experience - Backend Engineering',
+    title: "Siddhesh Sawant | Work I've Done",
     description:
-      'Professional experience of Siddhesh Sawant, specializing in backend optimization, microservices, Kafka pipelines, and cloud systems.',
+      'Backend engineering at Walmart and freelance software development, including production services and client work.',
   });
 
   return (
     <div className="page-wrapper">
       <header className="page-header container">
-        <h1>Work Experience</h1>
+        <h1>Work I've done</h1>
         <p>
-          A timeline of my professional journey, microservice development, and
-          system optimization achievements.
+          My experience includes backend engineering at Walmart and freelance
+          software development. I've worked on production services as well as
+          smaller client engagements, handling the implementation and working
+          directly with clients.
         </p>
       </header>
 

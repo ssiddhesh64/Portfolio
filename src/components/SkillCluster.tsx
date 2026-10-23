@@ -8,9 +8,9 @@ interface SkillClusterProps {
 export const SkillCluster: React.FC<SkillClusterProps> = ({ category }) => (
   <article className="skill-cluster">
     <h3>{category.category}</h3>
-    <div className="skill-pill-list">
+    <div className="badge-container">
       {category.items.map((skill) => (
-        <span key={skill} className="skill-pill">
+        <span key={skill} className="badge">
           {skill}
         </span>
       ))}
