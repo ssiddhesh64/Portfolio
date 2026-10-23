@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock, Calendar, Tag, BookOpen } from 'lucide-react';
+import { useParams, Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -99,9 +98,19 @@ const Mermaid: React.FC<{ chart: string; isDark: boolean }> = ({
   );
 };
 
+const formatDate = (iso: string): string => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+};
+
 export const Blog: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
 
   const [isDark, setIsDark] = useState(() =>
     document.documentElement.classList.contains('dark-theme'),
@@ -125,7 +134,7 @@ export const Blog: React.FC = () => {
     : 'Siddhesh Sawant | Engineering Blog - Backend & Distributed Systems';
   const metaDescription = post
     ? post.summary
-    : 'Technical articles on Java Spring Boot optimization, system scalability, data streaming, and systems coding.';
+    : 'Articles on Git internals, Java hashing and the Spring Boot bean lifecycle.';
 
   useMetadata({
     title: metaTitle,
@@ -143,7 +152,7 @@ export const Blog: React.FC = () => {
             The article you are looking for does not exist.
           </p>
           <Link to="/blog" className="btn btn-primary">
-            <ArrowLeft size={16} /> Back to Blog
+            Back to articles
           </Link>
         </div>
       );
@@ -151,34 +160,16 @@ export const Blog: React.FC = () => {
 
     return (
       <div className="page-wrapper">
-        <article className="blog-post-view container">
-          <button
-            onClick={() => navigate('/blog')}
-            className="btn btn-secondary btn-back"
-          >
-            <ArrowLeft size={16} /> Back to Articles
-          </button>
+        <article className="article container">
+          <Link to="/blog" className="back-link">
+            Back to articles
+          </Link>
 
-          <div className="blog-meta">
-            <span className="icon-flex-align">
-              <Calendar size={14} />
-              {post.date}
-            </span>
-            <span className="icon-flex-align">
-              <Clock size={14} />
-              {post.readTime}
-            </span>
-          </div>
-
-          <h1 className="blog-post-title">{post.title}</h1>
-
-          <div className="blog-post-tags">
-            {post.tags.map((tag, idx) => (
-              <span key={idx} className="badge icon-flex-align">
-                <Tag size={12} /> {tag}
-              </span>
-            ))}
-          </div>
+          <p className="meta">
+            {formatDate(post.date)}, {post.readTime}
+          </p>
+          <h1 className="article-title">{post.title}</h1>
+          <p className="meta">{post.tags.slice(0, 4).join(', ')}</p>
 
           <div className="blog-post-content">
             <ReactMarkdown
@@ -240,50 +231,30 @@ export const Blog: React.FC = () => {
   // Index List View
   return (
     <div className="page-wrapper">
-      <header className="page-header container">
-        <h1>Engineering Blog</h1>
-        <p>
-          Articles on Java Spring Boot optimization, system scalability, data
-          streaming, and systems coding.
-        </p>
-      </header>
+      <div className="container">
+        <header className="page-header">
+          <h1>Writing</h1>
+          <p>Notes on how Git, Java and Spring work under the hood.</p>
+        </header>
 
-      <div className="container blog-container">
-        {blogPosts.map((post) => (
-          <div
-            key={post.id}
-            className="glass-card blog-card scroll-reveal"
-            onClick={() => navigate(`/blog/${post.id}`)}
-          >
-            <div className="blog-meta">
-              <span className="icon-flex-align">
-                <Calendar size={14} />
-                {post.date}
-              </span>
-              <span className="icon-flex-align">
-                <Clock size={14} />
+        <ol>
+          {blogPosts.map((post) => (
+            <li key={post.id} className="entry">
+              <p className="entry-meta">
+                {formatDate(post.date)}
+                <br />
                 {post.readTime}
-              </span>
-            </div>
-
-            <h2 className="blog-title">{post.title}</h2>
-            <p className="blog-summary">{post.summary}</p>
-
-            <div className="blog-card-footer">
-              <div className="badge-container">
-                {post.tags.map((tag, idx) => (
-                  <span key={idx} className="badge">
-                    {tag}
-                  </span>
-                ))}
+              </p>
+              <div>
+                <h2 className="entry-title">
+                  <Link to={`/blog/${post.id}`}>{post.title}</Link>
+                </h2>
+                <p className="entry-summary">{post.summary}</p>
+                <p className="stack">{post.tags.slice(0, 4).join(', ')}</p>
               </div>
-
-              <span className="blog-read-more">
-                Read Article <BookOpen size={16} />
-              </span>
-            </div>
-          </div>
-        ))}
+            </li>
+          ))}
+        </ol>
       </div>
     </div>
   );

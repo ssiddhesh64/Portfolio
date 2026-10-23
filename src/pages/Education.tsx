@@ -1,5 +1,4 @@
 import React from 'react';
-import { GraduationCap, Calendar, Award } from 'lucide-react';
 import { education, skills } from '../data/resumeData';
 import { useMetadata } from '../hooks/useMetadata';
 
@@ -12,65 +11,41 @@ export const Education: React.FC = () => {
 
   return (
     <div className="page-wrapper">
-      <header className="page-header container">
-        <h1>Education & Skills</h1>
-        <p>
-          My academic foundation in computer science, honors degrees, and
-          specialized technical skill sets.
-        </p>
-      </header>
+      <div className="container">
+        <header className="page-header">
+          <h1>Skills and education</h1>
+        </header>
 
-      <div className="container education-layout-grid">
-        {/* Education Section */}
-        <section className="edu-section">
-          <h2 className="edu-section-title">
-            <GraduationCap className="icon-accent" /> Education
+        <section className="page-section" aria-labelledby="skills-title">
+          <h2 id="skills-title" className="section-title">
+            Skills
           </h2>
-
-          <div className="edu-cards-list">
-            {education.map((edu, index) => (
-              <div
-                key={index}
-                className="glass-card scroll-reveal timeline-card-content"
-              >
-                <div className="edu-card-header">
-                  <h3 className="edu-school">{edu.school}</h3>
-                  <span className="edu-duration">
-                    <Calendar size={14} />
-                    {edu.duration}
-                  </span>
-                </div>
-                <h4 className="edu-degree">{edu.degree}</h4>
-                <p className="edu-details">
-                  <Award size={14} className="icon-inline" />
-                  {edu.details}
-                </p>
-              </div>
+          <dl className="skills">
+            {skills.map((group) => (
+              <React.Fragment key={group.category}>
+                <dt>{group.category}</dt>
+                <dd>{group.items.join(', ')}</dd>
+              </React.Fragment>
             ))}
-          </div>
+          </dl>
         </section>
 
-        {/* Technical Strengths Section */}
-        <section className="skills-section">
-          <h2 className="skills-title">Technical Skills Summary</h2>
-
-          <div className="skills-grid">
-            {skills.map((category, index) => (
-              <div
-                key={index}
-                className="glass-card scroll-reveal skills-card-content"
-              >
-                <h3 className="skills-category-header">{category.category}</h3>
-                <div className="badge-container">
-                  {category.items.map((skill, sIndex) => (
-                    <span key={sIndex} className="badge">
-                      {skill}
-                    </span>
-                  ))}
+        <section className="page-section" aria-labelledby="edu-title">
+          <h2 id="edu-title" className="section-title">
+            Education
+          </h2>
+          <ol>
+            {education.map((edu) => (
+              <li key={edu.school} className="entry">
+                <p className="entry-meta">{edu.duration}</p>
+                <div>
+                  <h3 className="entry-title">{edu.degree}</h3>
+                  <p className="entry-sub">{edu.school}</p>
+                  <p className="meta">{edu.details}</p>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ol>
         </section>
       </div>
     </div>

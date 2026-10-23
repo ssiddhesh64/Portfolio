@@ -1,5 +1,4 @@
 import React from 'react';
-import { Briefcase, Calendar, MapPin } from 'lucide-react';
 import { experiences } from '../data/resumeData';
 import { useMetadata } from '../hooks/useMetadata';
 
@@ -12,47 +11,31 @@ export const Experience: React.FC = () => {
 
   return (
     <div className="page-wrapper">
-      <header className="page-header container">
-        <h1>Work Experience</h1>
-        <p>
-          A timeline of my professional journey, microservice development, and
-          system optimization achievements.
-        </p>
-      </header>
-
       <div className="container">
-        <div className="timeline">
-          {experiences.map((exp, index) => (
-            <div key={index} className="timeline-item scroll-reveal">
-              <div className="timeline-marker" />
-              <div className="glass-card timeline-card-content">
-                <div className="timeline-header">
-                  <h3 className="timeline-org">{exp.org}</h3>
-                  <span className="timeline-duration">
-                    <Calendar size={14} className="icon-inline" />
-                    {exp.duration}
-                  </span>
-                </div>
-                <div className="timeline-meta-row">
-                  <h4 className="timeline-role">
-                    <Briefcase size={14} className="icon-inline" />
-                    {exp.role}
-                  </h4>
-                  <span className="timeline-location">
-                    <MapPin size={14} className="icon-inline" />
-                    {exp.location}
-                  </span>
-                </div>
+        <header className="page-header">
+          <h1>Experience</h1>
+          <p>Where I have worked and what I built there, newest first.</p>
+        </header>
 
-                <ul className="timeline-details">
-                  {exp.details.map((detail, dIndex) => (
-                    <li key={dIndex}>{detail}</li>
+        <ol>
+          {experiences.map((exp) => (
+            <li key={`${exp.org}-${exp.duration}`} className="entry">
+              <div className="entry-meta">
+                <p>{exp.duration}</p>
+                <p>{exp.location}</p>
+              </div>
+              <div>
+                <h2 className="entry-title">{exp.org}</h2>
+                <p className="entry-sub">{exp.role}</p>
+                <ul className="bullets">
+                  {exp.details.map((detail) => (
+                    <li key={detail}>{detail}</li>
                   ))}
                 </ul>
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ol>
       </div>
     </div>
   );

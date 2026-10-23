@@ -23,31 +23,23 @@ const Blog = React.lazy(() =>
 const App: React.FC = () => {
   return (
     <Router>
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
       <div
         style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}
       >
         <Navbar />
-        <main style={{ flex: 1 }}>
+        <main id="main" style={{ flex: 1 }}>
           <Suspense
             fallback={
               <div
-                className="flex-center"
-                style={{
-                  minHeight: '60vh',
-                  flexDirection: 'column',
-                  gap: '1rem',
-                }}
+                className="container"
+                style={{ padding: '4rem 0' }}
+                role="status"
+                aria-label="Loading page"
               >
                 <div className="shimmer-spinner" />
-                <p
-                  style={{
-                    color: 'var(--text-secondary)',
-                    fontWeight: '500',
-                    fontSize: '0.95rem',
-                  }}
-                >
-                  Loading page...
-                </p>
               </div>
             }
           >
