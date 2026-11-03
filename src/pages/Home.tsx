@@ -1,8 +1,48 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Code, Database, Server, Cpu } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { personalInfo } from '../data/resumeData';
 import { useMetadata } from '../hooks/useMetadata';
+
+// System data for spec table - the evidence that leads
+const systems = [
+  {
+    name: 'E-Commerce Order Pipeline',
+    description: 'Core ordering microservice',
+    throughput: '180K req/day',
+    latency: '<100ms p95',
+    stack: ['Java', 'Spring Boot', 'Kafka'],
+    role: 'End-to-End Owner',
+    roleClass: 'role-badge-primary',
+  },
+  {
+    name: 'Event Streaming Platform',
+    description: 'Kafka-based event pipelines',
+    throughput: '1M+ events/day',
+    latency: '<120ms p95',
+    stack: ['Kafka', 'Spring Boot', 'Azure'],
+    role: 'Architect & Lead',
+    roleClass: 'role-badge-primary',
+  },
+  {
+    name: 'Data Ingestion Pipeline',
+    description: 'Automated article processing',
+    throughput: '100K articles/day',
+    latency: '—',
+    stack: ['Python', 'Azure Cloud', 'Cron'],
+    role: 'Designed & Delivered',
+    roleClass: 'role-badge-secondary',
+  },
+  {
+    name: 'Operational Automation Suite',
+    description: 'Python tooling & workflows',
+    throughput: '15+ hrs/wk saved',
+    latency: '40% faster',
+    stack: ['Python', 'Shell', 'CI/CD'],
+    role: 'Sole Author',
+    roleClass: 'role-badge-secondary',
+  },
+] as const;
 
 export const Home: React.FC = () => {
   useMetadata({
@@ -11,87 +51,70 @@ export const Home: React.FC = () => {
     description:
       'Software Engineer with 5+ years of experience building scalable microservices, distributed systems, event-driven architectures, and cloud-native applications.',
   });
+
   return (
     <div className="page-wrapper">
-      {/* Hero Section */}
-      <section className="section-padding flex-center hero-section">
-        {/* Soft decorative background glows */}
-        <div className="decor-glow-primary" />
-        <div className="decor-glow-secondary" />
-
+      {/* Hero Section — Evidence First */}
+      <section className="section-padding hero-section">
         <div className="container scroll-reveal hero-container">
-          <span className="hero-welcome">Welcome to my portfolio</span>
-
           <h1 className="hero-title">
-            Building Scalable & High-Performance Systems
+            {/* Walmart E-Commerce: 180K req/day · 1M Kafka events/day · sub-100ms p95 */}
+            {personalInfo.title}
           </h1>
 
-          <h2 className="hero-subtitle">
-            I'm{' '}
-            <strong style={{ color: 'var(--text-primary)' }}>
-              {personalInfo.name} {personalInfo.lastName}
-            </strong>
-            , {personalInfo.title}.
-          </h2>
-
-          <p className="hero-summary">{personalInfo.summary}</p>
+          <p className="hero-summary prose-max mt-2">
+            {personalInfo.summary}
+          </p>
 
           <div className="hero-buttons">
-            <Link to="/projects" className="btn btn-primary">
-              View My Work <ArrowRight size={18} />
+            <Link to="/experience" className="btn btn-primary">
+              View Systems & Experience <ArrowRight size={18} />
             </Link>
-            <Link to="/experience" className="btn btn-secondary">
-              My Experience
+            <Link to="/projects" className="btn btn-secondary">
+              View Projects
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Stats Highlight / Key Pillars */}
+      {/* Technical Spec Table — The Proof */}
       <section className="stats-section">
         <div className="container">
-          <div className="stats-grid">
-            <div className="glass-card scroll-reveal pillar-card">
-              <div className="pillar-icon-wrapper">
-                <Server size={28} />
-              </div>
-              <h3 className="pillar-title">Distributed Architecture</h3>
-              <p className="pillar-desc">
-                Designing Kafka event streams processing 1M+ daily events.
-              </p>
-            </div>
-
-            <div className="glass-card scroll-reveal pillar-card">
-              <div className="pillar-icon-wrapper">
-                <Cpu size={28} />
-              </div>
-              <h3 className="pillar-title">Scale & Latency</h3>
-              <p className="pillar-desc">
-                Managing API loads of 180K requests/day with sub-120ms p95
-                latency.
-              </p>
-            </div>
-
-            <div className="glass-card scroll-reveal pillar-card">
-              <div className="pillar-icon-wrapper">
-                <Database size={28} />
-              </div>
-              <h3 className="pillar-title">Data Ingestion</h3>
-              <p className="pillar-desc">
-                Ingesting 100K+ articles daily on automated cloud pipelines.
-              </p>
-            </div>
-
-            <div className="glass-card scroll-reveal pillar-card">
-              <div className="pillar-icon-wrapper">
-                <Code size={28} />
-              </div>
-              <h3 className="pillar-title">Automation & Tooling</h3>
-              <p className="pillar-desc">
-                Writing Python automation scripts that eliminate 15+ hours/week
-                of manual tasks.
-              </p>
-            </div>
+          <h2 className="section-title">
+            Systems Delivered at Walmart Global Tech
+          </h2>
+          <div className="spec-table-wrapper">
+            <table className="spec-table">
+              <thead>
+                <tr>
+                  <th>System</th>
+                  <th>Throughput</th>
+                  <th>Latency</th>
+                  <th>Stack</th>
+                  <th>My Role</th>
+                </tr>
+              </thead>
+              <tbody>
+                {systems.map((system, index) => (
+                  <tr key={index} tabIndex={0}>
+                    <td className="system-cell">
+                      <strong>{system.name}</strong>
+                      <span className="system-desc">{system.description}</span>
+                    </td>
+                    <td><code>{system.throughput}</code></td>
+                    <td><code>{system.latency}</code></td>
+                    <td className="stack-cell">
+                      {system.stack.map((tech: string, tIndex: number) => (
+                        <span key={tIndex} className="stack-badge">{tech}</span>
+                      ))}
+                    </td>
+                    <td className="role-cell">
+                      <span className={`role-badge ${system.roleClass}`}>{system.role}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
