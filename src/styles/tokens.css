@@ -1,0 +1,246 @@
+/*
+ * Design tokens: the one file to edit to restyle the site.
+ *
+ * Imported into the `theme` layer by src/index.css, so every component reads
+ * these through var(). Light theme is the default; dark overrides follow.
+ *
+ * Constraints worth knowing before editing:
+ * - Mermaid (src/components/blog/Mermaid.tsx) reads --font-sans, --bg-primary,
+ *   --bg-secondary, --text-primary, --text-secondary, --border, --accent-primary
+ *   and --accent-wash and its parser only accepts hex/rgb. Keep those as plain
+ *   hex, never color-mix() or var().
+ * - scripts/brand.py (favicon, app icons, OG image) hard-codes the light
+ *   --bg-primary, --text-primary and --accent-primary. Change them together.
+ * - index.html has <meta name="theme-color"> for each theme; keep it equal to
+ *   --bg-primary.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* ── Surfaces: three steps, page → frame → surface ───────────────────── */
+
+  /* Outermost canvas, visible around the framed content column. */
+  --bg-canvas: #efefec;
+  /* Main page / frame background. Mermaid diagram background. */
+  --bg-primary: #fbfbfa;
+  /* Raised surfaces that sit on the frame: code blocks, figures, dialogs. */
+  --bg-surface: #ffffff;
+  /* Quiet fill: inline code, skeleton/loading states, Mermaid nodes. */
+  --bg-secondary: #f3f3f1;
+
+  /* ── Text: one ink colour at decreasing strength ──────────────────────── */
+
+  /* Headings, names, strong text, primary buttons. 100% ink. */
+  --text-primary: #1a1a19;
+  /* Running text: paragraphs and list items. Ink at 80% over the frame. */
+  --text-body: #474746;
+  /* Meta text: dates, captions, labels, ledes. Ink at 64% (5.1:1, AA). */
+  --text-secondary: #6b6b6a;
+  /* Decorative only (counters, dividers). Ink at 38%; fails text contrast. */
+  --text-faint: #a6a6a4;
+
+  /* ── Lines: hairlines everywhere, one weight ──────────────────────────── */
+
+  /* Thickness of every divider and rule on the site. */
+  --line-width: 1px;
+  /* Quietest divider, e.g. between rows inside a list. Ink at 7%. */
+  --border-soft: #ebebea;
+  /* Default divider and control border. Ink at 12%. Mermaid cluster border. */
+  --border: #e0e0df;
+  /* Emphasised divider: section tops, page headers, outline buttons. Ink 18%. */
+  --border-strong: #d3d3d2;
+
+  /* ── Accent: vermilion, used for meaning, not decoration ─────────────── */
+
+  /* Current role, active nav/TOC item, highlighted code, primary hover. */
+  --accent-primary: #b8321a;
+  /* Hover state of anything painted with the accent. */
+  --accent-hover: #9c2914;
+  /* Accent tint for selections and Mermaid notes. Accent at 10%. */
+  --accent-wash: #f4e7e4;
+  /* Text drawn on top of an accent fill. */
+  --on-accent: #fbfbfa;
+
+  /* ── Interaction ──────────────────────────────────────────────────────── */
+
+  /* Link text. Light theme keeps links in ink; dark promotes the accent. */
+  --link: var(--text-primary);
+  /* Link underline at rest, as a share of the link colour. */
+  --link-underline-strength: 35%;
+  /* Link underline / colour on hover. */
+  --link-hover: var(--text-primary);
+  /* Bullet dots in lists. */
+  --marker: var(--text-primary);
+  /* Translucent fill laid over any surface on hover. */
+  --hover: rgb(26 26 25 / 0.06);
+  /* Keyboard focus outline colour, width and gap from the element. */
+  --focus-ring: var(--text-primary);
+  --focus-width: 2px;
+  --focus-offset: 2px;
+
+  /* ── Status ───────────────────────────────────────────────────────────── */
+
+  --danger: #b8321a;
+  --caution: #8a5a00;
+
+  /* ── Code highlighting (plugins/mdx/code-theme.ts maps Shiki to these) ── */
+  /* Mermaid parses some of these too, so they must stay plain hex. */
+
+  --code-fg: #1a1a19;
+  --code-comment: #6b6b6a;
+  --code-punct: #6b6b6a;
+  --code-keyword: #b8321a;
+  --code-type: #1a1a19;
+  --code-annotation: #6b6b6a;
+  --code-string: #2f6b4f;
+  --code-number: #2f6b4f;
+  --code-fn: #1a1a19;
+  /* Background of `// [!code highlight]` lines and highlighted characters. */
+  --code-highlight: #f0efe9;
+  /* Backgrounds of diff added / removed lines. */
+  --code-add: #e2eee6;
+  --code-remove: #f8e3de;
+
+  /* ── Radius: small and soft, never bubbly ─────────────────────────────── */
+
+  /* Tiny chips, inline code, highlighted characters. */
+  --radius-xs: 4px;
+  /* Code blocks, callouts, small overlays. */
+  --radius-sm: 6px;
+  /* Buttons, inputs, nav items, cards of controls. */
+  --radius: 9px;
+  /* Figures, diagrams, dialogs. */
+  --radius-lg: 12px;
+  /* Pills and dots. */
+  --radius-full: 9999px;
+
+  /* ── Elevation: borders and surface steps do the work; shadows are rare ─ */
+
+  /* Resting outline buttons. */
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  /* Small floating elements (zoom hint, popovers). */
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  /* Dialogs such as the image lightbox. */
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+
+  /* ── Motion: hover/focus colour fades only ────────────────────────────── */
+
+  /* Colour, background and border changes on hover. */
+  --duration-fast: 150ms;
+  /* Larger state changes (panels, frames). */
+  --duration-slow: 400ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Shorthand applied to interactive elements. */
+  --transition-colors:
+    color var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    text-decoration-color var(--duration-fast) var(--ease-standard);
+
+  /* ── Typography ───────────────────────────────────────────────────────── */
+
+  /* UI, headings and body. Mermaid reads this. */
+  --font-sans:
+    'Archivo', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Code, and only code. */
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Archivo's width axis for display headings (100% = normal width). */
+  --stretch-display: 112%;
+  /* Default UI text size. */
+  --text-base: 1.0625rem;
+  /* Meta text, nav links, captions. */
+  --text-small: 0.9375rem;
+  /* Article body text. */
+  --text-reading: 1.125rem;
+
+  /* ── Layout ───────────────────────────────────────────────────────────── */
+
+  /* Comfortable line length for running text. */
+  --measure: 66ch;
+  /* Maximum width of the content column. */
+  --page-width: 76rem;
+  /* Home: width of the sticky section-heading column (≥64rem). */
+  --col-head: 12rem;
+  /* Home: width of the shared date/label column (≥40rem). */
+  --col-time: 9.5rem;
+  /* Horizontal page padding; widens at 40rem (see below). */
+  --gutter: 1rem;
+
+  /* ── Spacing scale (rem, 16px base) ───────────────────────────────────── */
+
+  --space-1: 0.25rem; /*  4px  tight gaps inside a line */
+  --space-2: 0.5rem; /*  8px  gaps between related items */
+  --space-3: 1rem; /* 16px  default stack gap */
+  --space-4: 1.5rem; /* 24px  between groups */
+  --space-5: 2.5rem; /* 40px  between blocks */
+  --space-6: 4rem; /* 64px  section padding */
+  --space-7: 6rem; /* 96px  hero padding */
+}
+
+@media (min-width: 40rem) {
+  :root {
+    --gutter: 2rem;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Warm near-black, three steps. */
+  --bg-canvas: #0c0c0b;
+  --bg-primary: #121211;
+  --bg-surface: #161615;
+  --bg-secondary: #1d1d1c;
+
+  /* Warm bone ink. */
+  --text-primary: #f2f1ee;
+  --text-body: #b8b7b5; /* 74% */
+  --text-secondary: #989896; /* 60%, 6.5:1 */
+  --text-faint: #5a5958; /* 32%, decorative only */
+
+  --border-soft: #1f1f1e;
+  --border: #282827;
+  --border-strong: #363634;
+
+  --accent-primary: #ff7a59;
+  --accent-hover: #ff9677;
+  --accent-wash: #33211b;
+  --on-accent: #1a0e0a;
+
+  /* Dark promotes the accent to links, bullets and focus. */
+  --link: var(--accent-primary);
+  --link-underline-strength: 40%;
+  --link-hover: var(--accent-hover);
+  --marker: var(--accent-primary);
+  --hover: rgb(242 241 238 / 0.07);
+  --focus-ring: var(--accent-primary);
+
+  --danger: #ff7a59;
+  --caution: #e0b04f;
+
+  --code-fg: #f2f1ee;
+  --code-comment: #989896;
+  --code-punct: #989896;
+  --code-keyword: #ff7a59;
+  --code-type: #f2f1ee;
+  --code-annotation: #989896;
+  --code-string: #9cc7a6;
+  --code-number: #9cc7a6;
+  --code-fn: #f2f1ee;
+  --code-highlight: #232321;
+  --code-add: #1d2c22;
+  --code-remove: #3a221b;
+
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.5);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-slow: 0ms;
+  }
+}
