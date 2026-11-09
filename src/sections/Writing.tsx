@@ -19,13 +19,15 @@ export const Writing: React.FC = () => (
       <ul className="posts">
         {blogPosts.map((post) => (
           <li key={post.id} className="posts__item">
-            <Link to={`/blog/${post.id}`} className="posts__title">
-              {post.title}
-            </Link>
-            <p className="posts__meta num">
-              <time dateTime={post.date}>{formatPostDate(post.date)}</time>,{' '}
-              {post.readTime}
-            </p>
+            <time dateTime={post.date} className="posts__date num">
+              {formatPostDate(post.date)}
+            </time>
+            <div>
+              <Link to={`/blog/${post.id}`} className="posts__title">
+                {post.title}
+              </Link>
+              <p className="posts__meta num">{post.readTime}</p>
+            </div>
           </li>
         ))}
       </ul>

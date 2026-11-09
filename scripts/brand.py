@@ -21,9 +21,9 @@ PUBLIC = ROOT / "public"
 FONT = PUBLIC / "fonts" / "archivo-latin-var.woff2"
 
 # Keep in sync with the light theme tokens in src/index.css.
-PAPER = "#faf8f5"
-INK = "#1c1a17"
-INK_2 = "#5f594f"
+PAPER = "#fbfbfa"
+INK = "#1a1a19"
+INK_2 = "#5c5c57"
 ACCENT = "#b8321a"
 
 _fonts: dict[tuple[int, int], TTFont] = {}

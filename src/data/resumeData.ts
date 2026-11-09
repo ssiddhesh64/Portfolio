@@ -8,6 +8,7 @@ export interface PersonalInfo {
   focus: string;
   intro: string;
   availability: string;
+  location: string;
   email: string;
   github: string;
   linkedin: string;
@@ -62,7 +63,8 @@ export const personalInfo: PersonalInfo = {
   focus: 'Backend engineer working in Java, Spring Boot and Kafka.',
   intro:
     'I spent nearly five years at Walmart Global Tech building the Spring Boot services and Kafka pipelines behind parts of its e-commerce platform. I now build backend systems as a freelancer, and write about how the frameworks underneath them actually work.',
-  availability: 'Open to full-time backend roles, remote or Bangalore.',
+  availability: 'Full-time backend roles, remote or in Bangalore',
+  location: 'Bangalore, India',
   email: 'ssiddhesh64@gmail.com',
   github: 'https://github.com/ssiddhesh64',
   linkedin: 'https://www.linkedin.com/in/ssiddhesh64/',
@@ -128,6 +130,19 @@ export const roles: RoleItem[] = [
 
 export const projects: ProjectItem[] = [
   {
+    id: 'friend-recommendation',
+    name: 'Friend recommendation',
+    summary:
+      'Link prediction on a directed social graph from Facebook, framed as binary classification.',
+    date: 'Jan 2020',
+    details: [
+      'Engineered about 50 graph features, including Adamic-Adar and the Jaccard coefficient.',
+      // TODO: name the model and the score it reached; "high performance" was removed.
+      'Trained a non-linear classifier on those features.',
+    ],
+    stack: ['Python', 'Graph mining', 'Machine learning'],
+  },
+  {
     id: 'wikipedia-search',
     name: 'Wikipedia search engine',
     summary: 'Full-text search over a 21 GB Wikipedia dump.',
@@ -162,19 +177,6 @@ export const projects: ProjectItem[] = [
       'Workers coordinate through condition variables.',
     ],
     stack: ['C', 'C++', 'Threads'],
-  },
-  {
-    id: 'friend-recommendation',
-    name: 'Friend recommendation',
-    summary:
-      'Link prediction on a directed social graph from Facebook, framed as binary classification.',
-    date: 'Jan 2020',
-    details: [
-      'Engineered about 50 graph features, including Adamic-Adar and the Jaccard coefficient.',
-      // TODO: name the model and the score it reached; "high performance" was removed.
-      'Trained a non-linear classifier on those features.',
-    ],
-    stack: ['Python', 'Graph mining', 'Machine learning'],
   },
   {
     id: 'mess-portal',

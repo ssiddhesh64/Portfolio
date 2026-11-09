@@ -20,10 +20,13 @@ export const Experience: React.FC = () => (
       {roles.map((role) => (
         <li key={role.id} id={role.id} className="entry">
           <h3 className="entry__title">{role.org}</h3>
-          <p className="entry__when num">{formatRange(role.start, role.end)}</p>
+          <p className={`entry__when num${role.end ? '' : ' is-current'}`}>
+            {formatRange(role.start, role.end)}
+          </p>
           <p className="entry__role">{role.title}</p>
           <p className="entry__facts">
-            {role.location}, {KIND_LABEL[role.kind]},{' '}
+            <span>{role.location}</span>
+            <span>{KIND_LABEL[role.kind]}</span>
             <span className="num">
               {role.tenureNote ??
                 formatTenure(monthsBetween(role.start, role.end))}
