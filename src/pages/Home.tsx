@@ -10,10 +10,9 @@ import { Contact } from '../sections/Contact';
 
 export const Home: React.FC = () => {
   useMetadata({
-    title:
-      'Siddhesh Sawant | Software Engineer | Backend & Distributed Systems',
+    title: 'Siddhesh Sawant, backend engineer',
     description:
-      'Software Engineer with 5+ years of experience building scalable microservices, distributed systems, event-driven architectures, and cloud-native applications.',
+      'Backend engineer working in Java, Spring Boot and Kafka. Experience, projects, and articles on how backend frameworks work underneath.',
     canonicalPath: '/',
   });
 

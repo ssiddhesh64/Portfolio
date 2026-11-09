@@ -58,10 +58,10 @@ export interface EducationItem {
 export const personalInfo: PersonalInfo = {
   name: 'Siddhesh',
   lastName: 'Sawant',
-  title: 'Software Engineer | Backend Developer',
-  focus: 'Software Engineer | Backend Developer',
+  title: 'Backend engineer',
+  focus: 'Backend engineer working in Java, Spring Boot and Kafka.',
   intro:
-    'Backend Engineer with over 5 years of experience building and scaling high-performance microservices for large-scale e-commerce platforms. Expertise in Java, Spring Boot, Python, and event-driven architectures, with proven ownership in designing Kafka-based systems, improving system reliability, and delivering high-impact, customer-facing solutions.',
+    'I spent nearly five years at Walmart Global Tech building the Spring Boot services and Kafka pipelines behind parts of its e-commerce platform. I now build backend systems as a freelancer, and write about how the frameworks underneath them actually work.',
   availability: 'Open to full-time backend roles, remote or Bangalore.',
   email: 'ssiddhesh64@gmail.com',
   github: 'https://github.com/ssiddhesh64',
@@ -80,9 +80,10 @@ export const roles: RoleItem[] = [
     location: 'Remote',
     start: '2025-08',
     details: [
-      'Built scalable backend APIs using Spring Boot to manage appointment scheduling, slot availability, and booking workflows.',
-      'Developed RESTful APIs and microservices-based modules to support booking operations, customer management, and appointment tracking.',
-      'Improved operational efficiency and reduced booking conflicts by digitizing manual appointment scheduling.',
+      'Building the Spring Boot backend for an appointment booking system: scheduling, slot availability and the booking workflow.',
+      'REST APIs for bookings, customer records and appointment tracking.',
+      // TODO: verify. Is there a number for how much conflicts dropped?
+      'Moved appointment scheduling off a manual process, which reduced double bookings.',
     ],
     stack: ['Java', 'Spring Boot', 'REST'],
   },
@@ -95,11 +96,16 @@ export const roles: RoleItem[] = [
     start: '2020-08',
     end: '2025-05',
     details: [
-      'Developed scalable microservices using Java Spring Boot, handling 120K–180K requests/day with p95 latency ~ 120 ms for high traffic e-commerce systems.',
-      'Owned and delivered a customer-facing microservice end-to-end, handling 120 Peak TPS and p95 latency ~ 100 ms.',
-      'Automated operational workflows using Python, saving 15+ hours/week of manual effort and improving team productivity by 40%.',
-      'Designed and implemented Kafka-based event-driven pipelines processing 1M+ events/day, improving system throughput by 40%.',
-      'Engineered a cron-scheduled data processing pipeline on Azure Cloud to handle daily article ingestion of approximately 100K articles, reducing manual effort and ensuring consistent, reliable data updates.',
+      // TODO: verify 120K–180K requests/day and ~120 ms p95.
+      'Built Spring Boot microservices for the e-commerce platform, serving 120K–180K requests a day at about 120 ms p95.',
+      // TODO: verify 120 peak TPS and ~100 ms p95. Name the service if you can.
+      'Owned a customer-facing service end to end. It peaks at 120 TPS with p95 latency around 100 ms.',
+      // TODO: verify 15+ hours/week. Removed "productivity by 40%": restore only with a source.
+      'Wrote Python automation for recurring operational work, saving the team over 15 hours a week.',
+      // TODO: verify 1M+ events/day, and say what the 40% throughput gain was measured against.
+      'Designed Kafka event pipelines processing over 1M events a day, raising throughput by 40%.',
+      // TODO: verify ~100K articles/day, and say what an "article" is here.
+      'Built a scheduled Azure job that ingests about 100K articles a day, replacing manual data updates.',
     ],
     stack: ['Java', 'Spring Boot', 'Kafka', 'Python', 'Azure'],
   },
@@ -113,8 +119,8 @@ export const roles: RoleItem[] = [
     end: '2019-07',
     tenureNote: '10 weeks',
     details: [
-      'Developed a React Native mobile application integrated with SAP HANA backend to visualize POS device metrics.',
-      'Built a proof-of-concept application to evaluate feasibility and performance of React Native for enterprise use cases.',
+      'Built a React Native app that charts point-of-sale device metrics from an SAP HANA backend.',
+      'The app also served as a proof of concept for using React Native in internal enterprise apps.',
     ],
     stack: ['React Native', 'SAP HANA'],
   },
@@ -123,59 +129,61 @@ export const roles: RoleItem[] = [
 export const projects: ProjectItem[] = [
   {
     id: 'wikipedia-search',
-    name: 'Wikipedia Search Engine',
-    summary: 'Developed an efficient Search Engine for a 21 GB Wikipedia dump.',
+    name: 'Wikipedia search engine',
+    summary: 'Full-text search over a 21 GB Wikipedia dump.',
     date: 'Nov 2019',
     details: [
-      'Implemented multi-level inverted indexing to handle large data efficiently.',
-      'Integrated ranking algorithms (e.g., TF-IDF/BM25) to provide highly relevant search results.',
-      'Supported field-based queries and returned top 10 relevant results with optimized performance.',
+      'Built a multi-level inverted index so lookups stay fast at that size.',
+      // TODO: verify which ranking you used. The old copy said "e.g., TF-IDF/BM25".
+      'Ranked results with TF-IDF and returned the top 10 for each query.',
+      'Supported field-specific queries as well as plain full-text search.',
     ],
     stack: ['Python', 'Information retrieval'],
   },
   {
     id: 'mini-torrent',
-    name: 'Mini Torrent File Sharing System',
+    name: 'Mini torrent',
     summary:
-      'Developed a peer-to-peer file sharing system in C++ enabling parallel downloads from multiple peers.',
+      'Peer-to-peer file sharing in C++, downloading one file from several peers at once.',
     date: 'Aug 2019',
     details: [
-      'Improved download efficiency by allowing simultaneous chunk-based file transfers from multiple seeders.',
+      'Split files into chunks so a client can fetch different chunks from different seeders in parallel.',
+      'Peers talk over sockets, with a thread per transfer.',
     ],
     stack: ['C++', 'Sockets', 'Threads'],
   },
   {
     id: 'http-server',
-    name: 'Multi-threaded HTTP Server',
-    summary:
-      'Built a multi-threaded HTTP server capable of handling concurrent client requests.',
+    name: 'Multi-threaded HTTP server',
+    summary: 'An HTTP server in C/C++ that serves concurrent clients.',
     date: 'Jan 2019',
     details: [
-      'Designed a ThreadPool system to efficiently manage and assign worker threads.',
-      'Handled thread synchronization with conditional variables to serve multiple clients simultaneously.',
+      'Wrote the thread pool that hands incoming connections to worker threads.',
+      'Workers coordinate through condition variables.',
     ],
     stack: ['C', 'C++', 'Threads'],
   },
   {
     id: 'friend-recommendation',
-    name: 'Facebook Friend Recommendation',
+    name: 'Friend recommendation',
     summary:
-      'Conducted exploratory data analysis based on directed follow-link statistics and mapped it to a binary classification problem.',
+      'Link prediction on a directed social graph from Facebook, framed as binary classification.',
     date: 'Jan 2020',
     details: [
-      'Engineered about 50 graph features (e.g. Adamic-Adar, Jaccard coefficient) for the prediction model.',
-      'Used a non-linear machine learning model to achieve high performance on link prediction metrics.',
+      'Engineered about 50 graph features, including Adamic-Adar and the Jaccard coefficient.',
+      // TODO: name the model and the score it reached; "high performance" was removed.
+      'Trained a non-linear classifier on those features.',
     ],
     stack: ['Python', 'Graph mining', 'Machine learning'],
   },
   {
     id: 'mess-portal',
-    name: 'Mess Portal',
-    summary:
-      'Developed a web portal enabling users to view, modify, or cancel meals for any allowed date.',
+    name: 'Mess portal',
+    summary: 'A web portal for booking meals in a college mess.',
     date: 'Jun 2018',
     details: [
-      'Designed administrative panels to let mess administrators view analytics and change menus.',
+      'Users can view, change or cancel their meals for any open date.',
+      'An admin view shows meal counts and lets staff change the menu.',
     ],
     stack: ['Python', 'Flask', 'SQLite', 'HTML', 'CSS', 'JavaScript'],
   },
@@ -183,16 +191,16 @@ export const projects: ProjectItem[] = [
 
 export const skills: SkillCategory[] = [
   {
-    category: 'Programming Languages',
+    category: 'Languages',
     items: ['Java', 'Python', 'C/C++', 'SQL', 'JavaScript', 'TypeScript'],
   },
   {
-    category: 'Frameworks & Tech',
+    category: 'Frameworks and messaging',
     items: ['Spring Boot', 'Kafka', 'React', 'React Native', 'Flask'],
   },
   {
-    category: 'Cloud & Infrastructure',
-    items: ['Azure Cloud', 'GCP', 'Docker', 'Kubernetes', 'Git'],
+    category: 'Cloud and infrastructure',
+    items: ['Azure', 'GCP', 'Docker', 'Kubernetes', 'Git'],
   },
   {
     category: 'Databases',
@@ -208,19 +216,20 @@ export const skills: SkillCategory[] = [
 
 export const education: EducationItem[] = [
   {
-    school: 'International Institute of Information Technology Hyderabad',
-    degree: 'Masters of Technology',
+    school: 'IIIT Hyderabad',
+    degree: 'M.Tech',
     field: 'Computer Science',
     start: '2018-07',
     end: '2020-05',
-    details: 'CGPA: 7.32 / 10.00',
+    details: 'CGPA 7.32 / 10',
   },
   {
-    school: 'K.J. Somaiya College of Engineering',
-    degree: 'Bachelors of Technology',
-    field: 'Electronics & Telecommunications Engineering',
+    school: 'K.J. Somaiya College of Engineering, Mumbai',
+    degree: 'B.Tech',
+    field: 'Electronics and Telecommunication',
     start: '2014-05',
     end: '2018-05',
-    details: 'Graduated with honors in E&TC engineering',
+    // TODO: verify. Is "honours" a formal distinction on your degree?
+    details: 'Graduated with honours',
   },
 ];
