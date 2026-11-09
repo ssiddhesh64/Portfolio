@@ -10,6 +10,7 @@ export const Hero: React.FC = () => (
     </h1>
     <p className="hero__focus">{personalInfo.focus}</p>
     <p className="hero__intro">{personalInfo.intro}</p>
+    <p className="hero__status">{personalInfo.availability}</p>
 
     <div className="hero__actions">
       <a

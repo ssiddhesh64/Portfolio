@@ -54,9 +54,7 @@ export const Contact: React.FC = () => (
   >
     <SectionHead id="contact-title" title="Contact" />
     <div className="section__body contact">
-      <p className="contact__lede">
-        {personalInfo.availability} Email is the quickest way to reach me.
-      </p>
+      <p className="contact__lede">Email is the quickest way to reach me.</p>
       <p className="contact__email">
         <a href={`mailto:${personalInfo.email}`}>{personalInfo.email}</a>
       </p>

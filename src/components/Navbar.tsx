@@ -7,7 +7,6 @@ import { useTheme } from '../lib/theme';
 const SECTION_LINKS = [
   { label: 'Experience', to: '/#experience' },
   { label: 'Projects', to: '/#projects' },
-  { label: 'Contact', to: '/#contact' },
 ];
 
 export const Navbar: React.FC = () => {
@@ -28,6 +27,9 @@ export const Navbar: React.FC = () => {
           ))}
           <li>
             <NavLink to="/blog">Writing</NavLink>
+          </li>
+          <li>
+            <Link to="/#contact">Contact</Link>
           </li>
           <li>
             <button

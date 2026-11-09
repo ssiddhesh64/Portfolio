@@ -20,9 +20,9 @@ export const Home: React.FC = () => {
     <>
       <Hero />
       <Experience />
+      <Writing />
       <Projects />
       <Skills />
-      <Writing />
       <Education />
       <Contact />
     </>
