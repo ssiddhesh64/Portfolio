@@ -136,17 +136,38 @@
     font-variant-ligatures: none;
   }
 
+  body {
+    background: var(--bg-canvas);
+  }
+
   [id] {
     scroll-margin-top: var(--space-4);
+  }
+
+  @media (min-width: 40rem) {
+    [id] {
+      scroll-margin-top: calc(var(--nav-height) + var(--space-4));
+    }
   }
 }
 
 @layer components {
   /* Layout */
+  /* The framed column. 80rem matches --frame-width (media queries can't read var()). */
   .page {
     display: flex;
     flex-direction: column;
+    width: 100%;
+    max-width: var(--frame-width);
     min-height: 100vh;
+    margin-inline: auto;
+    background: var(--bg-primary);
+  }
+
+  @media (min-width: 80rem) {
+    .page {
+      border-inline: var(--line-width) solid var(--border-strong);
+    }
   }
 
   .page__main {
@@ -155,13 +176,13 @@
 
   .wrap {
     width: 100%;
-    max-width: var(--page-width);
     margin-inline: auto;
     padding-inline: var(--gutter);
   }
 
   .skip-link {
     position: absolute;
+    z-index: 100;
     left: var(--gutter);
     top: -3rem;
     padding: var(--space-2) var(--space-3);
@@ -174,14 +195,34 @@
     top: var(--space-2);
   }
 
-  /* Header and footer */
+  /* Header and footer. The header sticks from 40rem; on phones it wraps to two lines and scrolls away. */
+  .site-header {
+    border-bottom: var(--line-width) solid var(--border-strong);
+    background: color-mix(
+      in srgb,
+      var(--bg-primary) var(--header-opacity),
+      transparent
+    );
+  }
+
+  @media (min-width: 40rem) {
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      backdrop-filter: blur(var(--header-blur));
+      -webkit-backdrop-filter: blur(var(--header-blur));
+    }
+  }
+
   .site-nav {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-2) var(--space-4);
-    padding-block: var(--space-4);
+    min-height: var(--nav-height);
+    padding-block: var(--space-2);
   }
 
   .site-nav__name {
@@ -387,8 +428,8 @@
 
   .section,
   .site-footer {
-    background: linear-gradient(var(--rule), var(--rule)) center top /
-      calc(100% - 2 * var(--gutter)) var(--line-width) no-repeat;
+    background: linear-gradient(var(--rule), var(--rule)) center top / 100%
+      var(--line-width) no-repeat;
   }
 
   .section {
@@ -407,7 +448,7 @@
 
     .section__head {
       position: sticky;
-      top: var(--space-4);
+      top: calc(var(--nav-height) + var(--space-5));
       align-self: start;
     }
   }
@@ -458,7 +499,7 @@
 
     .entry > * {
       grid-column: 2;
-      max-width: var(--measure);
+      max-width: var(--measure-wide);
     }
 
     .entry > .entry__when {
@@ -828,16 +869,79 @@
     border-bottom-color: var(--border-strong);
   }
 
-  /* Article page: header, then the body beside a sticky contents list */
-  .post {
-    padding-block: var(--space-6);
+  /*
+   * Article page: two full-width bands (header, body). From 68rem each band
+   * has a right-hand rail: actions beside the header, contents beside the
+   * body. Text is centred in the main column so both sides breathe evenly.
+   */
+  .post__band {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .post__head {
-    max-width: var(--measure);
-    margin-bottom: var(--space-5);
-    padding-bottom: var(--space-4);
+  .post__band--head {
     border-bottom: var(--line-width) solid var(--border-strong);
+  }
+
+  .post__col {
+    min-width: 0;
+    padding-inline: max(var(--gutter), calc((100% - var(--measure)) / 2));
+  }
+
+  .post__band--head .post__col {
+    padding-block: var(--space-5) var(--space-4);
+  }
+
+  .post__band--body .post__col {
+    padding-block: var(--space-5) var(--space-6);
+  }
+
+  .post__rail--actions {
+    padding: 0 var(--gutter) var(--space-5);
+  }
+
+  aside.post__rail {
+    display: none;
+  }
+
+  @media (min-width: 68rem) {
+    .post__band {
+      grid-template-columns: minmax(0, 1fr) var(--rail-width);
+    }
+
+    .post__band--head .post__col {
+      padding-block: var(--space-6) var(--space-5);
+    }
+
+    .post__band--body .post__col {
+      padding-block: var(--space-6) var(--space-7);
+    }
+
+    .post__rail {
+      padding: var(--space-6) var(--space-4) var(--space-5);
+      border-left: var(--line-width) solid var(--border-strong);
+    }
+
+    aside.post__rail {
+      display: block;
+    }
+
+    /* Actions stack in the rail, bottom-aligned with the byline. */
+    .post__rail--actions {
+      display: flex;
+      align-items: flex-end;
+    }
+
+    .post__rail--actions .post-actions {
+      flex-direction: column;
+      align-items: stretch;
+      width: 100%;
+      margin-top: 0;
+    }
+
+    .post__rail--actions .post-actions__item {
+      justify-content: flex-start;
+    }
   }
 
   .post__title {
@@ -879,17 +983,6 @@
     vertical-align: middle;
   }
 
-  .post__layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-4);
-  }
-
-  .post__main {
-    min-width: 0;
-    max-width: var(--measure);
-  }
-
   .post__loading {
     min-height: 60vh;
     color: var(--text-secondary);
@@ -901,29 +994,10 @@
     margin-top: var(--space-6);
   }
 
-  @media (min-width: 68rem) {
-    .post__layout {
-      grid-template-columns: minmax(0, var(--measure)) minmax(12rem, 15rem);
-      justify-content: space-between;
-      column-gap: var(--space-6);
-    }
-
-    .post__aside {
-      grid-column: 2;
-      grid-row: 1;
-    }
-
-    .post__main {
-      grid-column: 1;
-      grid-row: 1;
-    }
-  }
-
   .post-actions {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
-    margin-top: var(--space-4);
   }
 
   .post-actions__item {
@@ -1020,8 +1094,8 @@
     .toc--wide {
       display: block;
       position: sticky;
-      top: var(--space-4);
-      max-height: calc(100vh - 2 * var(--space-4));
+      top: calc(var(--nav-height) + var(--space-5));
+      max-height: calc(100vh - var(--nav-height) - 2 * var(--space-5));
       overflow-y: auto;
       overscroll-behavior: contain;
     }
@@ -1033,7 +1107,7 @@
 
   /* Section anchors */
   .prose :is(h2, h3, h4) {
-    scroll-margin-top: var(--space-4);
+    scroll-margin-top: calc(var(--nav-height) + var(--space-4));
   }
 
   .heading-anchor {
