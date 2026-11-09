@@ -1,70 +1,56 @@
-import React, { Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React, { Suspense, useEffect } from 'react';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  useLocation,
+} from 'react-router-dom';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
+import { Home } from './pages/Home';
 
-// Lazy load page components for automatic bundle code-splitting
-const Home = React.lazy(() =>
-  import('./pages/Home').then((m) => ({ default: m.Home })),
+const BlogIndex = React.lazy(() =>
+  import('./pages/BlogIndex').then((m) => ({ default: m.BlogIndex })),
 );
-const Experience = React.lazy(() =>
-  import('./pages/Experience').then((m) => ({ default: m.Experience })),
+const BlogPost = React.lazy(() =>
+  import('./pages/BlogPost').then((m) => ({ default: m.BlogPost })),
 );
-const Projects = React.lazy(() =>
-  import('./pages/Projects').then((m) => ({ default: m.Projects })),
-);
-const Education = React.lazy(() =>
-  import('./pages/Education').then((m) => ({ default: m.Education })),
-);
-const Blog = React.lazy(() =>
-  import('./pages/Blog').then((m) => ({ default: m.Blog })),
+const NotFound = React.lazy(() =>
+  import('./pages/NotFound').then((m) => ({ default: m.NotFound })),
 );
 
-const App: React.FC = () => {
-  return (
-    <Router>
-      <div
-        style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}
-      >
-        <Navbar />
-        <main style={{ flex: 1 }}>
-          <Suspense
-            fallback={
-              <div
-                className="flex-center"
-                style={{
-                  minHeight: '60vh',
-                  flexDirection: 'column',
-                  gap: '1rem',
-                }}
-              >
-                <div className="shimmer-spinner" />
-                <p
-                  style={{
-                    color: 'var(--text-secondary)',
-                    fontWeight: '500',
-                    fontSize: '0.95rem',
-                  }}
-                >
-                  Loading page...
-                </p>
-              </div>
-            }
-          >
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/experience" element={<Experience />} />
-              <Route path="/projects" element={<Projects />} />
-              <Route path="/education" element={<Education />} />
-              <Route path="/blog" element={<Blog />} />
-              <Route path="/blog/:id" element={<Blog />} />
-            </Routes>
-          </Suspense>
-        </main>
-        <Footer />
-      </div>
-    </Router>
-  );
+/** Scrolls to the URL's #fragment after navigation, or to the top if none. */
+const ScrollManager: React.FC = () => {
+  const { pathname, hash } = useLocation();
+  useEffect(() => {
+    const target = hash ? document.getElementById(hash.slice(1)) : null;
+    if (target) target.scrollIntoView();
+    else window.scrollTo(0, 0);
+  }, [pathname, hash]);
+  return null;
 };
+
+const App: React.FC = () => (
+  <Router>
+    <ScrollManager />
+    <a href="#main" className="skip-link">
+      Skip to content
+    </a>
+    <div className="page">
+      <Navbar />
+      <main id="main" className="page__main">
+        <Suspense fallback={null}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/blog" element={<BlogIndex />} />
+            <Route path="/blog/:id" element={<BlogPost />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
+      </main>
+      <Footer />
+    </div>
+  </Router>
+);
 
 export default App;

@@ -1,67 +1,52 @@
-import React, { useEffect, useState } from 'react';
-import { NavLink } from 'react-router-dom';
-import { Sun, Moon } from 'lucide-react';
+import React from 'react';
+import { Link, NavLink } from 'react-router-dom';
+import { Moon, Sun } from 'lucide-react';
 import { personalInfo } from '../data/resumeData';
+import { useTheme } from '../lib/theme';
+
+const SECTION_LINKS = [
+  { label: 'Experience', to: '/#experience' },
+  { label: 'Projects', to: '/#projects' },
+];
 
 export const Navbar: React.FC = () => {
-  const [theme, setTheme] = useState<'light' | 'dark'>(
-    (localStorage.getItem('theme') as 'light' | 'dark') || 'light',
-  );
-
-  useEffect(() => {
-    const root = document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark-theme');
-    } else {
-      root.classList.remove('dark-theme');
-    }
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
-  };
-
-  const navItems = [
-    { label: 'Home', path: '/' },
-    { label: 'Experience', path: '/experience' },
-    { label: 'Projects', path: '/projects' },
-    { label: 'Education', path: '/education' },
-    { label: 'Blog', path: '/blog' },
-  ];
+  const { theme, toggle } = useTheme();
+  const next = theme === 'dark' ? 'light' : 'dark';
 
   return (
-    <nav className="navbar">
-      <div className="container nav-container">
-        <NavLink to="/" className="logo">
+    <header className="site-header">
+      <nav className="site-nav wrap" aria-label="Main">
+        <Link to="/" className="site-nav__name">
           {personalInfo.name} {personalInfo.lastName}
-        </NavLink>
-
-        {/* Desktop Links */}
-        <ul className="nav-links">
-          {navItems.map((item) => (
-            <li key={item.path}>
-              <NavLink
-                to={item.path}
-                className={({ isActive }) =>
-                  isActive ? 'nav-link active' : 'nav-link'
-                }
-              >
-                {item.label}
-              </NavLink>
+        </Link>
+        <ul className="site-nav__links">
+          {SECTION_LINKS.map((item) => (
+            <li key={item.to}>
+              <Link to={item.to}>{item.label}</Link>
             </li>
           ))}
           <li>
+            <NavLink to="/blog">Writing</NavLink>
+          </li>
+          <li>
+            <Link to="/#contact">Contact</Link>
+          </li>
+          <li>
             <button
-              onClick={toggleTheme}
-              className="theme-toggle"
-              aria-label="Toggle theme"
+              type="button"
+              className="icon-button"
+              onClick={toggle}
+              aria-label={`Switch to ${next} theme`}
             >
-              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+              {theme === 'dark' ? (
+                <Sun size={18} aria-hidden />
+              ) : (
+                <Moon size={18} aria-hidden />
+              )}
             </button>
           </li>
         </ul>
-      </div>
-    </nav>
+      </nav>
+    </header>
   );
 };

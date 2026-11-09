@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="470" viewBox="0 0 720 470" role="img" aria-labelledby="title">
+  <title id="title">A repository's spoke set: the Git proxy routes to three fileservers, each in a different rack and each holding a full copy of the repository</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#a3a39e"/>
+    </marker>
+    <style>
+      text { font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; fill: #ececea; }
+      .label { font-size: 15px; font-weight: 600; }
+      .small { font-size: 12.5px; }
+      .muted { fill: #a3a39e; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+      .accent { fill: #ff7a59; font-weight: 600; }
+    </style>
+  </defs>
+  <rect width="720" height="470" fill="#161616"/>
+
+  <!-- Client -->
+  <rect x="270" y="16" width="180" height="54" fill="#161616" stroke="#ececea" stroke-width="1.5"/>
+  <text x="360" y="39" text-anchor="middle" class="label">Client</text>
+  <text x="360" y="58" text-anchor="middle" class="mono muted">git push · git clone</text>
+  <path d="M360 70V110" stroke="#a3a39e" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Proxy -->
+  <rect x="220" y="112" width="280" height="62" fill="#212120" stroke="#ececea" stroke-width="1.5"/>
+  <text x="360" y="139" text-anchor="middle" class="label">Git proxy layer</text>
+  <text x="360" y="160" text-anchor="middle" class="small muted">routes reads and writes to the spoke set</text>
+
+  <!-- Routing rules, from the Quorum Write and Read Routing sections -->
+  <text x="516" y="134" class="small"><tspan class="accent">Writes</tspan> go to the replicas;</text>
+  <text x="516" y="151" class="small">2 of 3 must agree.</text>
+  <text x="516" y="172" class="small"><tspan class="accent">Reads</tspan> go to one healthy replica.</text>
+
+  <!-- Fan-out -->
+  <path d="M360 174V198H128V248" fill="none" stroke="#a3a39e" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M360 174V248" fill="none" stroke="#a3a39e" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M360 198H592V248" fill="none" stroke="#a3a39e" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Spoke set -->
+  <rect x="14" y="222" width="692" height="232" fill="none" stroke="#ff7a59" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text x="360" y="440" text-anchor="middle" class="small accent">Spoke set: three full replicas of one repository</text>
+
+  <rect x="28" y="250" width="200" height="164" fill="none" stroke="#4a4a47" stroke-dasharray="4 4"/>
+  <text x="42" y="272" class="small muted">Rack 3 · Row 7</text>
+  <rect x="42" y="286" width="172" height="112" fill="#212120" stroke="#ececea" stroke-width="1.5"/>
+  <text x="58" y="312" class="label">Fileserver A</text>
+  <text x="58" y="340" class="mono">repo.git/</text>
+  <text x="58" y="360" class="mono">├─ objects/</text>
+  <text x="58" y="380" class="mono">└─ refs/</text>
+  <rect x="260" y="250" width="200" height="164" fill="none" stroke="#4a4a47" stroke-dasharray="4 4"/>
+  <text x="274" y="272" class="small muted">Rack 11 · Row 2</text>
+  <rect x="274" y="286" width="172" height="112" fill="#212120" stroke="#ececea" stroke-width="1.5"/>
+  <text x="290" y="312" class="label">Fileserver B</text>
+  <text x="290" y="340" class="mono">repo.git/</text>
+  <text x="290" y="360" class="mono">├─ objects/</text>
+  <text x="290" y="380" class="mono">└─ refs/</text>
+  <rect x="492" y="250" width="200" height="164" fill="none" stroke="#4a4a47" stroke-dasharray="4 4"/>
+  <text x="506" y="272" class="small muted">Rack 19 · Row 4</text>
+  <rect x="506" y="286" width="172" height="112" fill="#212120" stroke="#ececea" stroke-width="1.5"/>
+  <text x="522" y="312" class="label">Fileserver C</text>
+  <text x="522" y="340" class="mono">repo.git/</text>
+  <text x="522" y="360" class="mono">├─ objects/</text>
+  <text x="522" y="380" class="mono">└─ refs/</text>
+</svg>

@@ -1,69 +1,58 @@
 import { useEffect } from 'react';
 
+const SITE_URL = 'https://siddheshsawant.in';
+
 interface MetadataProps {
   title: string;
   description: string;
+  /** Defaults to the current path. */
   canonicalPath?: string;
+  type?: 'website' | 'article';
+  noindex?: boolean;
 }
+
+const setMeta = (attr: 'name' | 'property', key: string, value: string) => {
+  let el = document.head.querySelector<HTMLMetaElement>(
+    `meta[${attr}="${key}"]`,
+  );
+  if (!el) {
+    el = document.createElement('meta');
+    el.setAttribute(attr, key);
+    document.head.appendChild(el);
+  }
+  el.content = value;
+};
 
 export const useMetadata = ({
   title,
   description,
   canonicalPath,
+  type = 'website',
+  noindex = false,
 }: MetadataProps) => {
   useEffect(() => {
-    // 1. Update title
+    const path = canonicalPath ?? window.location.pathname;
+    const url = SITE_URL + (path.length > 1 ? path.replace(/\/$/, '') : '');
+
     document.title = title;
 
-    // Helper function to update meta tags
-    const updateMetaTag = (
-      selector: string,
-      attribute: string,
-      value: string,
-    ) => {
-      let element = document.querySelector(selector);
-      if (!element) {
-        // If it doesn't exist, dynamically create it
-        if (selector.startsWith('meta[')) {
-          element = document.createElement('meta');
-          const match = selector.match(/\[(name|property)="([^"]+)"\]/);
-          if (match) {
-            element.setAttribute(match[1], match[2]);
-          }
-          document.head.appendChild(element);
-        }
-      }
-      if (element) {
-        element.setAttribute(attribute, value);
-      }
-    };
-
-    // 2. Update description
-    updateMetaTag('meta[name="description"]', 'content', description);
-
-    // 3. Update canonical link
-    const path =
-      canonicalPath !== undefined ? canonicalPath : window.location.pathname;
-    // Normalize path to avoid double trailing slashes
-    const cleanPath =
-      path.endsWith('/') && path.length > 1 ? path.slice(0, -1) : path;
-    const fullCanonicalUrl = `https://siddheshsawant.in${cleanPath}`;
-
-    let canonicalElement = document.querySelector('link[rel="canonical"]');
-    if (!canonicalElement) {
-      canonicalElement = document.createElement('link');
-      canonicalElement.setAttribute('rel', 'canonical');
-      document.head.appendChild(canonicalElement);
+    let canonical = document.head.querySelector<HTMLLinkElement>(
+      'link[rel="canonical"]',
+    );
+    if (!canonical) {
+      canonical = document.createElement('link');
+      canonical.rel = 'canonical';
+      document.head.appendChild(canonical);
     }
-    canonicalElement.setAttribute('href', fullCanonicalUrl);
+    canonical.href = url;
 
-    // 4. Update Open Graph details
-    updateMetaTag('meta[property="og:title"]', 'content', title);
-    updateMetaTag('meta[property="og:description"]', 'content', description);
-    updateMetaTag('meta[property="og:url"]', 'content', fullCanonicalUrl);
-
-    // 5. Update Twitter Card details
-    updateMetaTag('meta[name="twitter:title"]', 'content', title);
-    updateMetaTag('meta[name="twitter:description"]', 'content', description);
-  }, [title, description, canonicalPath]);
+    setMeta('name', 'description', description);
+    setMeta('name', 'robots', noindex ? 'noindex' : 'index, follow');
+    setMeta('property', 'og:type', type);
+    setMeta('property', 'og:title', title);
+    setMeta('property', 'og:description', description);
+    setMeta('property', 'og:url', url);
+    setMeta('name', 'twitter:title', title);
+    setMeta('name', 'twitter:description', description);
+  }, [title, description, canonicalPath, type, noindex]);
 };

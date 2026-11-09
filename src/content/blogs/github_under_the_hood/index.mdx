@@ -15,7 +15,8 @@ tags:
   ]
 ---
 
-# Under the Hood of GitHub: How to Store Petabytes of Code
+import spokeSetLight from './spoke-set.light.svg';
+import spokeSetDark from './spoke-set.dark.svg';
 
 ## The Scale Problem Nobody Talks About
 
@@ -192,20 +193,21 @@ A commit object contains: the root tree hash, parent commit hashes (zero for ini
 
 Commits form a **DAG (Directed Acyclic Graph)**. Each commit points to its parent(s). Branches are just pointers into this graph.
 
-```plaintext
-          [commit C]  ← HEAD (main)
-          /   tree: T3
-         /
-[commit B]
-    tree: T2
-         \
-          [commit A]  ← (initial)
-              tree: T1
-
-
-T1 → { blob: README.md (v1), tree: src/ → { blob: main.py (v1) } }
-T2 → { blob: README.md (v2), tree: src/ → { blob: main.py (v1) } }  ← reuses blob!
-T3 → { blob: README.md (v2), tree: src/ → { blob: main.py (v2) } }
+```mermaid caption="Three commits, three snapshots. Unchanged content is shared: T2 reuses the src/ tree from T1, and T3 reuses README.md v2 from T2."
+flowchart TB
+    C["commit C<br/>HEAD (main)"] -->|parent| B[commit B]
+    B -->|parent| A["commit A<br/>(initial)"]
+    C --> T3[tree T3]
+    B --> T2[tree T2]
+    A --> T1[tree T1]
+    T1 --> R1(["blob README.md v1"])
+    T1 --> S1["tree src/"]
+    T2 --> R2(["blob README.md v2"])
+    T2 --> S1
+    T3 --> R2
+    T3 --> S3["tree src/"]
+    S1 --> M1(["blob main.py v1"])
+    S3 --> M2(["blob main.py v2"])
 ```
 
 Notice that commit B's tree (`T2`) reuses the `main.py` blob from `T1` unchanged — it just points to the same blob hash. Git never stores the same content twice. When you have 50,000 commits and only modified 3 files in the last 1000 commits, those 3 files don't duplicate — there are just new blobs for the changed versions.
@@ -407,16 +409,13 @@ Now that we understand the object model, let's trace exactly what happens when y
 
 Git supports two transport protocols for push: **SSH** and **Smart HTTP**. Smart HTTP is more common on GitHub and is the one we'll trace.
 
-```plaintext
-your machine                    GitHub
-     │                              │
-     │── HTTPS GET /repo.git/info/refs?service=git-receive-pack ──►
-     │                              │
-     │◄──── 200 OK (ref advertisement) ────────────────────────────
-     │   # service=git-receive-pack
-     │   a3f9c2b... refs/heads/main
-     │   b7d3e9a... refs/heads/develop
-     │   capabilities: side-band-64k ofs-delta agent=git/2.40.0
+```mermaid caption="Step 1: the client asks which refs GitHub has."
+sequenceDiagram
+    participant Client as Your machine
+    participant GH as GitHub
+    Client->>GH: HTTPS GET /repo.git/info/refs?service=git-receive-pack
+    GH-->>Client: 200 OK (ref advertisement)
+    Note over Client,GH: service=git-receive-pack<br/>a3f9c2b… refs/heads/main<br/>b7d3e9a… refs/heads/develop<br/>capabilities: side-band-64k ofs-delta agent=git/2.40.0
 ```
 
 The server sends its current ref state plus a capability list. The client now knows what the server has.
@@ -430,16 +429,14 @@ For a push, the client:
 3.  Builds a packfile containing exactly those objects
 4.  Sends the packfile + ref update instructions
 
-```plaintext
-your machine                    GitHub
-     │                              │
-     │── HTTPS POST /repo.git/git-receive-pack ────────────────────►
-     │   [pack-protocol header]
-     │   old-sha new-sha refs/heads/main\0 report-status side-band-64k
-     │   [packfile bytes]
-     │                              │
-     │◄──── unpack ok ─────────────────────────────────────────────
-     │      ok refs/heads/main
+```mermaid caption="Step 2: the client sends ref updates and the packfile in one request."
+sequenceDiagram
+    participant Client as Your machine
+    participant GH as GitHub
+    Client->>GH: HTTPS POST /repo.git/git-receive-pack
+    Note over Client,GH: [pack-protocol header]<br/>old-sha new-sha refs/heads/main NUL<br/>report-status side-band-64k<br/>[packfile bytes]
+    GH-->>Client: unpack ok
+    GH-->>Client: ok refs/heads/main
 ```
 
 The wire protocol format for the ref update line:
@@ -458,29 +455,18 @@ For a new branch (no previous commit): `old-sha` is `000000000000000000000000000
 
 When GitHub's servers receive the push, several things happen in sequence:
 
-```plaintext
-Incoming packfile
-       │
-       ▼
-[Git Proxy / Receive Layer]
-       │  ← authenticates, routes to correct Spoke
-       ▼
-[Pre-receive hooks]
-       │  ← branch protection rules, code scanning, size limits
-       ▼
-[Object unpacking]
-       │  ← validates every object's SHA-1, writes to object store
-       ▼
-[Reference update]
-       │  ← atomically updates branch pointers
-       ▼
-[Spokes replication]  ←─ THIS IS WHERE THE MAGIC HAPPENS
-       │  ← synchronously replicates to 2+ other fileservers
-       ▼
-[Post-receive hooks]
-       │  ← triggers CI/CD, notifications, webhooks
-       ▼
-[Success response to client]
+```mermaid caption="What GitHub does with an incoming packfile. Spokes replication is where the magic happens."
+flowchart TD
+    In([Incoming packfile])
+    Proxy["<b>Git proxy / receive layer</b><br/>authenticates, routes to correct Spoke"]
+    Pre["<b>Pre-receive hooks</b><br/>branch protection rules, code scanning, size limits"]
+    Unpack["<b>Object unpacking</b><br/>validates every object's SHA-1, writes to object store"]
+    Ref["<b>Reference update</b><br/>atomically updates branch pointers"]
+    Spokes["<b>Spokes replication</b><br/>synchronously replicates to 2+ other fileservers"]
+    Post["<b>Post-receive hooks</b><br/>triggers CI/CD, notifications, webhooks"]
+    Done([Success response to client])
+    In --> Proxy --> Pre --> Unpack --> Ref --> Spokes --> Post --> Done
+    class Spokes key
 ```
 
 The key constraint: **the client gets a success response only after Spokes confirms at least 2 of 3 replicas have the data**. The replication is synchronous from the client's perspective. If your push succeeds, your data is already in multiple places.
@@ -511,32 +497,12 @@ Because Git is content-addressed, two servers can independently verify they have
 
 Every repository on GitHub lives on exactly **three fileservers** — its "spoke set".
 
-```plaintext
-                     ┌─────────────────────────────────────┐
-                     │           Git Proxy Layer            │
-                     │  (routes reads/writes to spokes)    │
-                     └───────────┬──────────┬──────────────┘
-                                 │          │
-              ┌──────────────────▼──┐    ┌──▼──────────────────┐
-              │   Fileserver A      │    │   Fileserver B       │
-              │   Rack 3, Row 7     │    │   Rack 11, Row 2     │
-              │   ┌───────────────┐ │    │   ┌───────────────┐  │
-              │   │  repo.git/    │ │    │   │  repo.git/    │  │
-              │   │  objects/     │ │    │   │  objects/     │  │
-              │   │  refs/        │ │    │   │  refs/        │  │
-              │   └───────────────┘ │    │   └───────────────┘  │
-              └─────────────────────┘    └──────────────────────┘
-                                                  │
-                              ┌───────────────────▼──────────────┐
-                              │         Fileserver C              │
-                              │         Rack 19, Row 4            │
-                              │         ┌───────────────┐         │
-                              │         │  repo.git/    │         │
-                              │         │  objects/     │         │
-                              │         │  refs/        │         │
-                              │         └───────────────┘         │
-                              └──────────────────────────────────┘
-```
+<Figure
+  light={spokeSetLight}
+  dark={spokeSetDark}
+  alt="The Git proxy routes reads and writes to a spoke set of three fileservers, A, B and C, in racks 3, 11 and 19. Each holds a full repo.git with objects and refs. Writes need 2 of 3 replicas to agree; reads go to one healthy replica."
+  caption="A repository's spoke set: three full replicas in three different racks."
+/>
 
 Critical design choices:
 
@@ -550,35 +516,27 @@ Critical design choices:
 
 When you push, here is what Spokes actually does:
 
-```plaintext
-Push arrives at Proxy
-        │
-        │ 1. Proxy identifies the three fileservers for this repo
-        │
-        ├───────────────────────────────────────────┐
-        │                                           │
-        ▼                                           ▼
-  Fileserver A                              Fileserver B
-  git-receive-pack                          git-receive-pack
-  (validates objects)                       (validates objects)
-  (writes to disk)                          (writes to disk)
-        │                                           │
-        │ ACK: "wrote to sha X"                     │ ACK: "wrote to sha X"
-        │ ← same result hash                        │ ← same result hash
-        └────────────────────┬──────────────────────┘
-                             │
-                             │ 2 of 3 confirmed with identical result
-                             │
-                             ▼
-                    ┌──────────────────┐
-                    │  Commit the write │
-                    │  Update refs      │
-                    └──────────────────┘
-                             │
-                             ▼
-                    Send ACK to client ✓
-
-                    (Fileserver C catches up asynchronously)
+```mermaid caption="The quorum write: two of three replicas must agree on the result hash before the push is acknowledged."
+sequenceDiagram
+    participant Client
+    participant Proxy
+    participant A as Fileserver A
+    participant B as Fileserver B
+    participant C as Fileserver C
+    Client->>Proxy: push
+    Note over Proxy: 1. Identify the three fileservers for this repo
+    par
+        Proxy->>A: git-receive-pack
+        Note over A: validates objects, writes to disk
+        A-->>Proxy: ACK: "wrote to sha X"
+    and
+        Proxy->>B: git-receive-pack
+        Note over B: validates objects, writes to disk
+        B-->>Proxy: ACK: "wrote to sha X"
+    end
+    Note over Proxy: 2 of 3 confirmed with identical result:<br/>commit the write, update refs
+    Proxy-->>Client: ACK
+    Proxy-)C: catch up asynchronously
 ```
 
 The critical point: **a write is only committed if at least 2 of 3 replicas confirm they received the same objects and produced the same result**. "Same result" means the resulting repository state (all object hashes, all ref states) is identical on both servers.
@@ -640,16 +598,20 @@ When you fork a repository on GitHub, you might expect a full copy to be made. I
 
 GitHub maintains the concept of a **fork network** — a group of repositories that share a common history. The original repository and all its forks share the same underlying object pool.
 
-```plaintext
-  microsoft/vscode  (original)
-         │
-         │ fork
-         ├── user1/vscode    (fork)
-         ├── user2/vscode    (fork)
-         └── org/vscode      (fork)
-
-All four share the same blob and commit objects.
-Each has its own refs (branches, tags) pointing into the shared pool.
+```mermaid caption="A fork network. All four repositories share the same blob and commit objects; each has its own refs pointing into the shared pool."
+flowchart TB
+    subgraph refs[" "]
+        direction LR
+        O["microsoft/vscode<br/>(original)"]
+        F1["user1/vscode<br/>(fork)"]
+        F2["user2/vscode<br/>(fork)"]
+        F3["org/vscode<br/>(fork)"]
+    end
+    Pool[("Shared object pool<br/>blobs · trees · commits")]
+    O -- refs --> Pool
+    F1 -- refs --> Pool
+    F2 -- refs --> Pool
+    F3 -- refs --> Pool
 ```
 
 When you push a commit to your fork that adds a new file, only the new objects (the new blob, the new tree, the new commit) are added to the pool. The 200,000 existing blobs from the original are not duplicated.
@@ -719,48 +681,33 @@ The actual binary file lives on an **LFS object storage server** (in GitHub's ca
 
 ### The LFS Push/Pull Flow
 
-```plaintext
-git push with LFS file
-        │
-        │ 1. Pre-push hook intercepts
-        │
-        ▼
-.gitattributes check:
-*.psd filter=lfs diff=lfs merge=lfs -text
-        │
-        │ 2. Clean filter runs: computes SHA-256, uploads binary to LFS API
-        │
-        ▼
-LFS API (https://github.com/org/repo.git/info/lfs/objects/batch)
-        │
-        │ 3. GitHub returns pre-signed upload URL
-        │
-        ▼
-Binary file → Cloud Object Storage (S3 / Azure Blob)
-        │
-        │ 4. Pointer file stored as normal Git blob in the repo
-        │
-        ▼
-Normal git push (tiny pointer file only)
+```mermaid caption="git push with an LFS file: the binary goes to object storage, the repository gets a pointer."
+sequenceDiagram
+    participant Git as git push
+    participant LFS as LFS API
+    participant Store as Cloud object storage
+    participant Repo as GitHub repository
+    Note over Git: 1. Pre-push hook intercepts.<br/>.gitattributes: *.psd filter=lfs diff=lfs merge=lfs -text
+    Note over Git: 2. Clean filter computes SHA-256
+    Git->>LFS: POST /info/lfs/objects/batch
+    LFS-->>Git: 3. Pre-signed upload URL
+    Git->>Store: Upload binary (S3 / Azure Blob)
+    Git->>Repo: 4. Normal git push (tiny pointer file only)
+```
 
-
-git checkout / git pull with LFS file
-        │
-        │ 1. Smudge filter intercepts when checking out
-        │
-        ▼
-Read pointer file from Git object store
-        │
-        │ 2. Request actual binary from LFS server
-        │
-        ▼
-LFS API returns pre-signed download URL
-        │
-        ▼
-Binary file downloaded from Cloud Object Storage
-        │
-        ▼
-Written to your working directory
+```mermaid caption="git checkout or git pull with an LFS file: the smudge filter swaps the pointer for the binary."
+sequenceDiagram
+    participant Git as git checkout / pull
+    participant Repo as Git object store
+    participant LFS as LFS API
+    participant Store as Cloud object storage
+    Note over Git: 1. Smudge filter intercepts on checkout
+    Git->>Repo: Read pointer file
+    Git->>LFS: 2. Request the actual binary
+    LFS-->>Git: Pre-signed download URL
+    Git->>Store: Download binary
+    Store-->>Git: Binary file
+    Note over Git: Written to your working directory
 ```
 
 ### LFS Setup

@@ -1,4 +1,36 @@
 {
+  "redirects": [
+    {
+      "source": "/experience",
+      "destination": "/#experience",
+      "permanent": true
+    },
+    {
+      "source": "/projects",
+      "destination": "/#projects",
+      "permanent": true
+    },
+    {
+      "source": "/education",
+      "destination": "/#education",
+      "permanent": true
+    },
+    {
+      "source": "/blog/bean_lifecycle",
+      "destination": "/blog/spring_bean_lifecycle",
+      "permanent": true
+    },
+    {
+      "source": "/blog/github_storage",
+      "destination": "/blog/github_under_the_hood",
+      "permanent": true
+    },
+    {
+      "source": "/blog/hashSetInternals",
+      "destination": "/blog/hashset_internals",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",
