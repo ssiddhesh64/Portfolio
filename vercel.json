@@ -5,7 +5,11 @@
       "destination": "/#experience",
       "permanent": true
     },
-    { "source": "/projects", "destination": "/#projects", "permanent": true },
+    {
+      "source": "/projects",
+      "destination": "/#projects",
+      "permanent": true
+    },
     {
       "source": "/education",
       "destination": "/#education",

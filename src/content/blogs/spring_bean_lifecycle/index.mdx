@@ -18,8 +18,6 @@ tags:
   ]
 ---
 
-# The Complete Spring Bean Lifecycle: What Really Happens Before Your Application Starts
-
 Most Spring Boot developers write code like this:
 
 ```java
@@ -111,13 +109,12 @@ Spring Boot creates:
 
 Think of it as:
 
-```text
-Super Container
-    |
-    +-- BeanFactory
-    +-- Environment
-    +-- Event System
-    +-- Resource Management
+```mermaid
+flowchart TD
+    AC["ApplicationContext<br/>(super container)"] --> BF[BeanFactory]
+    AC --> Env[Environment]
+    AC --> Ev[Event System]
+    AC --> Res[Resource Management]
 ```
 
 The `ApplicationContext` is responsible for managing all beans.
@@ -588,7 +585,7 @@ before bean removal.
 
 ## Full Lifecycle Summary
 
-```mermaid
+```mermaid caption="The full bean lifecycle, from context refresh to destruction."
 flowchart TD
     Start(["Application Start"]) --> Refresh["Context refresh()"]
     Refresh --> Scan["Bean Discovery & Registration"]

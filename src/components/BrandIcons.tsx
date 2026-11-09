@@ -25,6 +25,13 @@ export const GitHubIcon: React.FC<IconProps> = ({ size = 18 }) => (
   </svg>
 );
 
+export const XIcon: React.FC<IconProps> = ({ size = 18 }) => (
+  <svg {...base(size)}>
+    <path d="M4 4l11.733 16h4.267l-11.733 -16z" />
+    <path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772" />
+  </svg>
+);
+
 export const LinkedInIcon: React.FC<IconProps> = ({ size = 18 }) => (
   <svg {...base(size)}>
     <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />

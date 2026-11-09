@@ -17,8 +17,6 @@ tags:
   ]
 ---
 
-# Why Mutable Objects Break HashSet
-
 Most Java developers use `HashSet` every day.
 
 ```java
@@ -104,12 +102,9 @@ To understand this behavior, we need to understand how `HashSet` actually works 
 
 One of the most important facts about Java collections is:
 
-```text
-HashSet
-   ↓
-internally uses
-   ↓
-HashMap
+```mermaid
+flowchart LR
+    HS[HashSet] -- internally uses --> HM[HashMap]
 ```
 
 When you write:
@@ -176,12 +171,18 @@ Result:
 
 **Visual representation:**
 
-```text
-    B0[Bucket 0]
-    B1[Bucket 1] --> E1(Employee id=1)
-    B2[Bucket 2]
-    B3[Bucket 3]
-    B15[Bucket 15]
+```mermaid caption="After add(emp): hashCode() 1 places the employee in bucket 1."
+flowchart TB
+    subgraph table["Bucket array (n = 16)"]
+        direction LR
+        B0[Bucket 0]
+        B1[Bucket 1]
+        B2[Bucket 2]
+        B3[Bucket 3]
+        Bn["…"]
+        B15[Bucket 15]
+    end
+    B1 --> E1("Employee id=1")
 ```
 
 The object is now physically stored in Bucket 1.
@@ -246,9 +247,16 @@ Java performs the following steps:
 
 **Visual representation:**
 
-```text
-    B1[Bucket 1] -.-> E1(Employee id=2)
-    B2[Bucket 2] --> Empty[Empty]
+```mermaid caption="After emp.id = 2: contains(emp) searches bucket 2, but the object is still in bucket 1."
+flowchart TB
+    Q["contains(emp)<br/>hashCode() = 2"] --> B2
+    subgraph table["Bucket array"]
+        direction LR
+        B1[Bucket 1]
+        B2[Bucket 2]
+    end
+    B1 -.-> E1("Employee id=2")
+    B2 --> Empty[Empty]
 ```
 
 The object is physically stored in Bucket 1.
@@ -351,6 +359,7 @@ Now you have an object trapped inside the collection.
 
 Java expects the following rule to be respected:
 
+> [!WARNING]
 > If fields participate in equals() and hashCode(), those fields should not change while the object is being used as a key in a HashMap or an element in a HashSet.
 
 Violating this rule can cause:
@@ -479,6 +488,7 @@ The same issue applies to:
 
 In general:
 
+> [!WARNING]
 > Never mutate fields used by equals() and hashCode() while the object is stored in a hash-based collection.
 
 ---

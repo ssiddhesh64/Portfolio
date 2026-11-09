@@ -34,8 +34,17 @@ export const BlogIndex: React.FC = () => {
               <p className="articles__meta num">
                 <time dateTime={post.date}>{formatPostDate(post.date)}</time>,{' '}
                 {post.readTime}
+                {post.series &&
+                  `, part ${post.series.order} of ${post.series.total} in ${post.series.name}`}
               </p>
               <p className="articles__summary">{post.summary}</p>
+              {post.tags.length > 0 && (
+                <ul className="articles__tags" aria-label="Topics">
+                  {post.tags.map((tag) => (
+                    <li key={tag}>{tag}</li>
+                  ))}
+                </ul>
+              )}
             </li>
           ))}
         </ol>
