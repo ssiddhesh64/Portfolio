@@ -84,21 +84,9 @@ const Mermaid: React.FC<{ chart: string }> = ({ chart }) => {
     // Mermaid is large; load it only when an article contains a diagram.
     import('mermaid')
       .then(async ({ default: mermaid }) => {
+        // Mermaid's colour parser only accepts hex/rgb, so tokens must stay hex.
         const css = getComputedStyle(document.documentElement);
-        // Mermaid's colour parser rejects oklch(); paint each token to a pixel
-        // and read it back as hex.
-        const ctx = document.createElement('canvas').getContext('2d', {
-          willReadFrequently: true,
-        });
-        const v = (name: string) => {
-          const value = css.getPropertyValue(name).trim();
-          if (!ctx || !value || name.startsWith('--font')) return value;
-          ctx.clearRect(0, 0, 1, 1);
-          ctx.fillStyle = value;
-          ctx.fillRect(0, 0, 1, 1);
-          const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-          return `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
-        };
+        const v = (name: string) => css.getPropertyValue(name).trim();
         mermaid.initialize({
           startOnLoad: false,
           securityLevel: 'strict',

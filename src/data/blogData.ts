@@ -8,8 +8,7 @@ export interface BlogPost {
   tags: string[];
 }
 
-// Dynamically glob-import all markdown files from the 'content/blogs' folder
-// { query: '?raw', import: 'default', eager: true } yields Record<filepath, rawTextContentString>
+// Every markdown file in content/blogs, as raw text keyed by path.
 const rawModules = import.meta.glob('../content/blogs/*.md', {
   query: '?raw',
   import: 'default',
@@ -17,7 +16,7 @@ const rawModules = import.meta.glob('../content/blogs/*.md', {
 }) as Record<string, string>;
 
 function parseMarkdown(filepath: string, rawContent: string): BlogPost {
-  // Extract file ID from path (e.g. "../../blogs/some-post.md" -> "some-post")
+  // The file name is the URL slug: content/blogs/foo.md -> /blog/foo
   const id = filepath.split('/').pop()?.replace('.md', '') || 'unknown';
 
   let title = id.replace(/-/g, ' ');
@@ -33,7 +32,7 @@ function parseMarkdown(filepath: string, rawContent: string): BlogPost {
       const yaml = parts[1];
       content = parts.slice(2).join('---').trim();
 
-      // Robust state-machine frontmatter parser supporting multi-line fields (e.g. formatted arrays/tags)
+      // Minimal frontmatter parser; values may span lines (tag arrays).
       let currentKey: string | null = null;
       let currentValueAccumulator: string[] = [];
 
@@ -97,10 +96,9 @@ function parseMarkdown(filepath: string, rawContent: string): BlogPost {
     }
   }
 
-  // Fallback summary if not specified in frontmatter
   if (!summary) {
     const cleanText = content
-      .replace(/[#*`\-[\]()]/g, '') // Strip markdown characters
+      .replace(/[#*`\-[\]()]/g, '')
       .replace(/\s+/g, ' ')
       .trim();
     summary = cleanText.slice(0, 160) + '...';
@@ -109,7 +107,7 @@ function parseMarkdown(filepath: string, rawContent: string): BlogPost {
   return { id, title, summary, content, date, readTime, tags };
 }
 
-// Convert all imported markdown files to BlogPost items and sort them by date descending (approximate)
+// Newest first.
 export const blogPosts: BlogPost[] = Object.entries(rawModules)
   .map(([path, content]) => parseMarkdown(path, content))
   .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
