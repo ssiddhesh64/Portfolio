@@ -238,11 +238,11 @@
   --measure: 68ch;
   /* Line length for home-page entries, which are shorter bullet lines. */
   --measure-wide: 76ch;
+  /* Article page: how far code, figures and tables extend past the text on each side. ≥68rem. */
+  --prose-bleed: 4rem;
   /* Article page: width of the right-hand column (actions, contents). ≥68rem. */
   --rail-width: 16rem;
-  /* Home: width of the sticky section-heading column (≥64rem). */
-  --col-head: 11rem;
-  /* Home: width of the shared date/label column (≥40rem). */
+  /* Home and blog index: width of the shared date/label column (≥40rem). */
   --col-time: 9.5rem;
   /* Horizontal page padding; widens at 40rem (see below). */
   --gutter: 1rem;
