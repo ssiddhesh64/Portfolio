@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 import mdx from '@mdx-js/rollup';
 import remarkFrontmatter from 'remark-frontmatter';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import rehypeSlug from 'rehype-slug';
 import rehypePrettyCode, {
   type Options as PrettyCodeOptions,
@@ -31,8 +33,24 @@ const prettyCode: PrettyCodeOptions = {
 };
 
 const mdxPlugin = mdx({
-  remarkPlugins: [remarkFrontmatter, remarkGfm, remarkCallouts, remarkMermaid],
-  rehypePlugins: [rehypeSlug, [rehypePrettyCode, prettyCode], rehypeCodeTitle],
+  remarkPlugins: [
+    remarkFrontmatter,
+    remarkGfm,
+    remarkMath,
+    remarkCallouts,
+    remarkMermaid,
+  ],
+  // KaTeX runs before Shiki so `$$` blocks are typeset, not highlighted as
+  // code. Math renders at build time; an article that uses it imports
+  // 'katex/dist/katex.min.css' so only that article loads the stylesheet.
+  // Keep the `katex` dependency on the same version rehype-katex renders with:
+  // KaTeX renames CSS classes between minor versions (0.19 renamed .sizing).
+  rehypePlugins: [
+    rehypeSlug,
+    [rehypeKatex, { strict: 'ignore' }],
+    [rehypePrettyCode, prettyCode],
+    rehypeCodeTitle,
+  ],
 });
 
 // @mdx-js/rollup strips the query before matching, so it would also compile

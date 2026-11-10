@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMetadata } from '../hooks/useMetadata';
 
 interface NotFoundProps {
-  kind?: 'page' | 'article';
+  kind?: 'page' | 'article' | 'category';
 }
 
 export const NotFound: React.FC<NotFoundProps> = ({ kind = 'page' }) => {
@@ -13,12 +13,15 @@ export const NotFound: React.FC<NotFoundProps> = ({ kind = 'page' }) => {
     noindex: true,
   });
 
-  const article = kind === 'article';
+  // Articles and categories both point back to the writing page.
+  const article = kind !== 'page';
 
   return (
     <div className="reading wrap">
       <h1 className="reading__title">
-        {article ? 'No article at this address' : 'Nothing at this address'}
+        {kind === 'page'
+          ? 'Nothing at this address'
+          : `No ${kind} at this address`}
       </h1>
       <p className="reading__lede">
         The link may be mistyped, or the {kind} may have moved.{' '}

@@ -1,0 +1,975 @@
+---
+title: 'Linear Regression from First Principles: Least Squares, Geometry and Gradient Descent'
+date: '2026-11-10'
+summary: 'Fitting a straight line is the oldest trick in machine learning and still the one most worth understanding completely. This article builds linear regression from a five-point example to the normal equations, shows why least squares is a projection and a maximum-likelihood estimate at the same time, trains it with gradient descent you can steer, and then puts it to work on a real dataset to see where it holds up and where it breaks.'
+tags:
+  [
+    'Machine Learning',
+    'Linear Regression',
+    'Statistics',
+    'Optimization',
+    'Gradient Descent',
+    'Python',
+    'scikit-learn',
+    'NumPy',
+  ]
+---
+
+import 'katex/dist/katex.min.css';
+import LineFitter from './LineFitter';
+import GradientDescentLab from './GradientDescentLab';
+import ProjectionDiagram from './ProjectionDiagram';
+import polyLight from './polynomial-degree.light.svg';
+import polyDark from './polynomial-degree.dark.svg';
+import residLight from './residual-patterns.light.svg';
+import residDark from './residual-patterns.dark.svg';
+
+A courier logs five deliveries: how far each one was, and how long it took.
+
+| Distance (km) | Time (min) |
+| ------------: | ---------: |
+|             1 |         20 |
+|             2 |         40 |
+|             3 |         50 |
+|             4 |         40 |
+|             5 |         50 |
+
+A sixth order comes in for 3.5 km. How long will it take?
+
+Nobody can answer that exactly. Traffic, stairs and a slow lift all add noise. But the table clearly says something: longer trips tend to take longer. If we could summarise that tendency as a rule, "a fixed overhead plus so many minutes per kilometre", we could give a sensible estimate for any distance, including ones we have never seen.
+
+Linear regression is the method for finding that rule. It is the first model most people learn, and it is easy to treat it as a warm-up before the interesting stuff. That is a mistake. Nearly every idea that matters in machine learning shows up here in its simplest, most inspectable form: a model with parameters, a loss that scores it, an optimiser that improves it, a geometry that explains the optimum, a probabilistic story that justifies the loss, and the gap between fitting the data you have and predicting the data you don't.
+
+This article works through all of those, in that order. The five deliveries above stay with us for the first half, because every number they produce can be checked by hand. The second half moves to a real medical dataset, where linear regression is used in earnest and its failure modes show up.
+
+**What you need:** comfort with algebra, the idea of a derivative as a slope, and vectors and matrix multiplication. Everything else is built up as we go. Every number in this article comes from running the code shown; synthetic data is labelled as such.
+
+## What a line means
+
+Before any equations, it is worth being precise about what we are looking for.
+
+We have **inputs** (distance) and an **output** we want to predict (time). In machine-learning terms the input is a _feature_ and the output is the _target_; each row of the table is a _training example_. We want a function that takes a distance and returns a predicted time.
+
+The simplest useful function is a straight line:
+
+$$
+\hat{y} = w x + b
+$$
+
+- $x$ is the input: distance in km.
+- $\hat{y}$ ("y-hat") is the model's **prediction**. The hat distinguishes it from $y$, the time that was actually observed.
+- $w$ is the **slope**, or _weight_: how many extra minutes each extra kilometre adds. Its unit is minutes per km.
+- $b$ is the **intercept**, or _bias_: the predicted time at $x = 0$. Here it reads as fixed overhead: parking, finding the door, the handover.
+
+$w$ and $b$ are the model's **parameters**. Choosing a line means choosing two numbers. "Learning" in linear regression means nothing more mysterious than picking those two numbers well.
+
+Why a line and not a curve? Because it is the simplest shape that can express "more of $x$ means more (or less) of $y$". It has two parameters, both of which mean something a person can check. And as we will see, _linear_ is more flexible than it sounds: the model only has to be linear in its parameters, not in its inputs.
+
+## Measuring how wrong a line is
+
+Draw any line through the points and some fall above it, some below. The vertical gap between an observed point and the line is the **residual** for that example:
+
+$$
+r_i = y_i - \hat{y}_i = y_i - (w x_i + b)
+$$
+
+The subscript $i$ indexes the examples, $i = 1, \dots, n$, with $n = 5$ here. A positive residual means the delivery took longer than the line predicted.
+
+A good line has small residuals. To turn "small residuals" into a single number we can optimise, we need to combine $n$ residuals into one score. Adding them up doesn't work: positive and negative residuals cancel, and a terrible line can score zero. We need something that treats an error of $-10$ as bad as $+10$.
+
+The standard choice is to square each residual and average:
+
+$$
+J(w, b) = \frac{1}{n} \sum_{i=1}^{n} \left(y_i - (w x_i + b)\right)^2
+$$
+
+This is the **mean squared error** (MSE). $J$ is the **loss** (or _cost_) function: it takes a candidate pair of parameters and returns how badly that line fits the training data. Lower is better. The best line is the pair $(w, b)$ that makes $J$ as small as possible, which is why this method is called **least squares**.
+
+Why squares, rather than absolute values?
+
+1. **Squares punish large errors disproportionately.** One residual of 10 costs 100; ten residuals of 1 cost 10 in total. Least squares strongly prefers many small misses to one big one. That is often what we want, and it is also its main weakness, as outliers will show.
+2. **Squares are smooth.** $r^2$ has a derivative everywhere; $|r|$ has a kink at zero. Smoothness is what lets us solve for the minimum exactly with calculus, and optimise it with gradients.
+3. **Squares have a probabilistic justification.** If the noise in $y$ is Gaussian, minimising squared error is exactly the same as finding the most likely parameters. We derive that [later](#the-probabilistic-view-least-squares-as-maximum-likelihood).
+
+And why average rather than sum? The location of the minimum is the same either way, since dividing by $n$ doesn't move it. Averaging makes the loss comparable across datasets of different sizes. Some texts use $\frac{1}{2n}$ instead, which makes the derivative slightly tidier. Again, the minimum doesn't move.
+
+The figure below makes the squaring literal. Each residual is drawn as a square whose area is the squared error, so MSE is the average area of the squares. Move the line and watch the total change. Then add the outlier and see how far one point drags the least-squares line.
+
+<LineFitter />
+
+A few things to try:
+
+- Get your MSE as low as you can by hand before pressing "Snap". The best achievable value for these five points is **48**.
+- Notice that at the optimum, the squares above the line and below it balance. That is not a coincidence: it is the first of the two conditions we derive next.
+- Add the outlier at (7 km, 10 min). The least-squares slope collapses, because the outlier's huge square dominates the sum. One bad record can wreck the fit.
+
+## Solving for the best line exactly
+
+$J(w, b)$ is a function of two variables. Picture it as a surface over the $(w, b)$ plane. Because every term is a squared linear expression in $w$ and $b$, the surface is a bowl: a paraboloid with a single lowest point. At the bottom of a smooth bowl the surface is flat in every direction, so both partial derivatives are zero. Setting them to zero gives two equations for two unknowns.
+
+### The intercept condition
+
+Differentiate $J$ with respect to $b$, treating $w$ as a constant. The chain rule brings down a factor of $2$ and a factor of $-1$ (the derivative of the inner expression with respect to $b$):
+
+$$
+\frac{\partial J}{\partial b} = -\frac{2}{n} \sum_{i=1}^{n} \left(y_i - w x_i - b\right)
+$$
+
+Setting this to zero and dividing by $-2/n$ says the residuals sum to zero: $\sum_i r_i = 0$. That is the balance you saw in the interactive figure. Expanding the sum:
+
+$$
+\sum_i y_i - w \sum_i x_i - n b = 0
+\quad\Longrightarrow\quad
+b = \bar{y} - w \bar{x}
+$$
+
+where $\bar{x}$ and $\bar{y}$ are the means of the inputs and targets. This has a neat reading: **the least-squares line always passes through the point of averages** $(\bar{x}, \bar{y})$.
+
+### The slope condition
+
+Now differentiate with respect to $w$. The inner derivative is $-x_i$ this time:
+
+$$
+\frac{\partial J}{\partial w} = -\frac{2}{n} \sum_{i=1}^{n} x_i \left(y_i - w x_i - b\right) = 0
+$$
+
+So the residuals, weighted by their inputs, also sum to zero: $\sum_i x_i r_i = 0$. Substitute $b = \bar{y} - w\bar{x}$:
+
+$$
+\sum_i x_i \left[(y_i - \bar{y}) - w (x_i - \bar{x})\right] = 0
+$$
+
+One small trick finishes it. Because deviations from a mean sum to zero, $\sum_i \bar{x}(y_i - \bar{y}) = 0$, so we can replace the leading $x_i$ with $(x_i - \bar{x})$ without changing anything. Then solve for $w$:
+
+$$
+w = \frac{\sum_{i}(x_i - \bar{x})(y_i - \bar{y})}{\sum_{i}(x_i - \bar{x})^2}
+$$
+
+The numerator measures how $x$ and $y$ move together: it is $n$ times their **covariance**. The denominator measures how much $x$ moves on its own: $n$ times its **variance**. So the slope is $\operatorname{Cov}(x, y) / \operatorname{Var}(x)$: of all the variation in $x$, how much does $y$ follow, and at what rate?
+
+The formula also says when the slope is undefined. If every $x_i$ is the same, the denominator is zero. You cannot learn how time depends on distance from deliveries that all went the same distance.
+
+### Worked example
+
+With $\bar{x} = 3$ and $\bar{y} = 40$:
+
+| $x_i$ | $y_i$ | $x_i - \bar{x}$ | $y_i - \bar{y}$ | product | $(x_i - \bar{x})^2$ |
+| ----: | ----: | --------------: | --------------: | ------: | ------------------: |
+|     1 |    20 |              −2 |             −20 |      40 |                   4 |
+|     2 |    40 |              −1 |               0 |       0 |                   1 |
+|     3 |    50 |               0 |              10 |       0 |                   0 |
+|     4 |    40 |               1 |               0 |       0 |                   1 |
+|     5 |    50 |               2 |              10 |      20 |                   4 |
+|       |       |                 |      **Totals** |  **60** |              **10** |
+
+$$
+w = \frac{60}{10} = 6 \text{ min/km}, \qquad b = 40 - 6 \times 3 = 22 \text{ min}
+$$
+
+The model reads: _22 minutes of overhead, plus 6 minutes per kilometre_. The 3.5 km order gets a prediction of $22 + 6 \times 3.5 = 43$ minutes.
+
+The residuals are $-8, 6, 10, -6, -2$. They sum to zero, and $\sum x_i r_i = -8 + 12 + 30 - 24 - 10 = 0$, as the two conditions promised. Their squares sum to 240, so the minimum MSE is $240 / 5 = 48$.
+
+The same computation in NumPy:
+
+```python title="simple_fit.py"
+import numpy as np
+
+# Five deliveries: distance in km, time in minutes (a toy dataset).
+x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+y = np.array([20.0, 40.0, 50.0, 40.0, 50.0])
+
+x_mean, y_mean = x.mean(), y.mean()
+w = np.sum((x - x_mean) * (y - y_mean)) / np.sum((x - x_mean) ** 2)
+b = y_mean - w * x_mean
+
+residuals = y - (w * x + b)
+print(f"w = {w:.2f} min/km, b = {b:.2f} min")
+print("residuals:", residuals)
+print(f"MSE = {np.mean(residuals ** 2):.2f}")
+```
+
+```text
+w = 6.00 min/km, b = 22.00 min
+residuals: [-8.  6. 10. -6. -2.]
+MSE = 48.00
+```
+
+> [!NOTE]
+> Least squares is old. Legendre published it in 1805 to fit comet orbits, and Gauss, who published in 1809, claimed to have used it since 1795. The priority dispute is a famous episode in the history of statistics; Stigler's [Gauss and the Invention of Least Squares](https://doi.org/10.1214/aos/1176345451) (1981) is the standard account.
+
+**Check your understanding**
+
+<details>
+<summary>If you add 10 minutes to every observed time, what happens to w and b?</summary>
+
+$w$ is unchanged: every $y_i - \bar{y}$ stays the same, because $\bar{y}$ also rises by 10. $b = \bar{y} - w\bar{x}$ rises by exactly 10. A constant shift in the target moves only the intercept.
+
+</details>
+
+<details>
+<summary>If you measure distance in metres instead of kilometres, what happens to w and to the predictions?</summary>
+
+Every $x_i - \bar{x}$ is multiplied by 1000, so the numerator grows by 1000 and the denominator by $1000^2$: $w$ shrinks to $0.006$ min/m. $b$ is unchanged, and so is every prediction. The fitted line is the same line in different units. This is why the size of a coefficient on its own says nothing about how important a feature is.
+
+</details>
+
+## Many features: the matrix form
+
+Real problems rarely have one input. Delivery time might depend on distance, number of floors, time of day and whether it is raining. With $p$ features the model becomes
+
+$$
+\hat{y} = b + w_1 x_1 + w_2 x_2 + \cdots + w_p x_p
+$$
+
+Each $w_j$ is now a _partial_ slope: the change in prediction when $x_j$ increases by one unit **and every other feature is held fixed**. That qualifier matters, and we will come back to it when features are correlated.
+
+Writing out sums over $i$ and $j$ quickly becomes unreadable, so we switch to matrices. Stack the examples as rows and add a column of ones, which the intercept multiplies:
+
+$$
+\underbrace{\begin{bmatrix} y_1 \\ y_2 \\ \vdots \\ y_n \end{bmatrix}}_{\mathbf{y}\;(n)}
+\approx
+\underbrace{\begin{bmatrix}
+1 & x_{11} & \cdots & x_{1p} \\
+1 & x_{21} & \cdots & x_{2p} \\
+\vdots & \vdots & \ddots & \vdots \\
+1 & x_{n1} & \cdots & x_{np}
+\end{bmatrix}}_{X\;(n \times (p+1))}
+\underbrace{\begin{bmatrix} b \\ w_1 \\ \vdots \\ w_p \end{bmatrix}}_{\boldsymbol{\theta}\;(p+1)}
+$$
+
+- $X$ is the **design matrix**. Row $i$ is example $i$; column $j$ is feature $j$ across all examples.
+- $\boldsymbol{\theta}$ collects every parameter, intercept first.
+- $\hat{\mathbf{y}} = X\boldsymbol{\theta}$ computes all $n$ predictions in one matrix-vector product: an $n \times (p+1)$ matrix times a length-$(p+1)$ vector gives a length-$n$ vector.
+
+The loss is the same MSE, written as a squared vector length:
+
+$$
+J(\boldsymbol{\theta}) = \frac{1}{n} \lVert \mathbf{y} - X\boldsymbol{\theta} \rVert^2
+= \frac{1}{n} (\mathbf{y} - X\boldsymbol{\theta})^\top (\mathbf{y} - X\boldsymbol{\theta})
+$$
+
+### Deriving the normal equations
+
+Multiply out the product. The two cross terms are the same scalar, since a scalar equals its own transpose, so they combine:
+
+$$
+J(\boldsymbol{\theta}) = \frac{1}{n}\left( \mathbf{y}^\top\mathbf{y} - 2\boldsymbol{\theta}^\top X^\top \mathbf{y} + \boldsymbol{\theta}^\top X^\top X \boldsymbol{\theta} \right)
+$$
+
+This is the vector version of a quadratic $a - 2\theta c + \theta^2 d$. Differentiating term by term, using $\nabla_{\boldsymbol\theta}(\boldsymbol\theta^\top \mathbf{c}) = \mathbf{c}$ and $\nabla_{\boldsymbol\theta}(\boldsymbol\theta^\top A \boldsymbol\theta) = 2A\boldsymbol\theta$ for symmetric $A$:
+
+$$
+\nabla J(\boldsymbol{\theta}) = \frac{2}{n} \left( X^\top X \boldsymbol{\theta} - X^\top \mathbf{y} \right) = \frac{2}{n} X^\top (X\boldsymbol{\theta} - \mathbf{y})
+$$
+
+Keep this gradient in mind; gradient descent uses it directly. Setting it to zero gives the **normal equations**:
+
+$$
+X^\top X \, \hat{\boldsymbol{\theta}} = X^\top \mathbf{y}
+$$
+
+If the columns of $X$ are linearly independent, $X^\top X$ is invertible and the solution is unique:
+
+$$
+\hat{\boldsymbol{\theta}} = (X^\top X)^{-1} X^\top \mathbf{y}
+$$
+
+With one feature, this reduces exactly to the slope and intercept formulas derived above. The two scalar conditions $\sum r_i = 0$ and $\sum x_i r_i = 0$ are the two rows of $X^\top \mathbf{r} = \mathbf{0}$.
+
+**Is the zero-gradient point really a minimum?** The second derivative, the **Hessian**, is $H = \frac{2}{n} X^\top X$. For any vector $\mathbf{v}$, $\mathbf{v}^\top X^\top X \mathbf{v} = \lVert X\mathbf{v} \rVert^2 \ge 0$, so $H$ is positive semi-definite and $J$ is convex: a bowl with no false bottoms. When $X$ has full column rank the inequality is strict, the bowl is strictly convex, and the minimum is unique. When it does not, for example a feature that is an exact copy of another, there is a whole valley of equally good solutions. We return to that under [multicollinearity](#correlated-features-make-coefficients-unstable).
+
+## The geometry: least squares is a projection
+
+The normal equations have a picture that explains them better than the algebra does.
+
+Think of $\mathbf{y}$ not as $n$ separate numbers but as a single point in $n$-dimensional space. For the courier data that is the point $(20, 40, 50, 40, 50)$ in $\mathbb{R}^5$. Every possible prediction vector $X\boldsymbol\theta$ is a combination of the columns of $X$: some amount of the all-ones column plus some amount of the distance column. As $\boldsymbol\theta$ varies, $X\boldsymbol\theta$ sweeps out a flat subspace, the **column space** of $X$. Here it is a 2-dimensional plane inside $\mathbb{R}^5$.
+
+The model can only produce predictions in that plane. Unless the data fall exactly on a line, $\mathbf{y}$ is not in it. Least squares asks: which point in the plane is closest to $\mathbf{y}$?
+
+<ProjectionDiagram />
+
+The answer from ordinary geometry is the foot of the perpendicular. The closest point $\hat{\mathbf y}$ is the one where the residual vector $\mathbf r = \mathbf y - \hat{\mathbf y}$ is orthogonal to the plane. Orthogonal to the plane means orthogonal to every column of $X$, which means every dot product with a column is zero:
+
+$$
+X^\top (\mathbf{y} - X\hat{\boldsymbol\theta}) = \mathbf{0}
+$$
+
+That is the normal equations again, and now the name makes sense: _normal_ means perpendicular. The matrix $P = X(X^\top X)^{-1}X^\top$ that maps $\mathbf y$ to $\hat{\mathbf y}$ is the **projection matrix**; in statistics it is often called the _hat matrix_, because it puts the hat on $\mathbf y$.
+
+The geometry also explains things that are tedious to prove algebraically:
+
+- **Adding a feature can never increase training error.** It enlarges the plane, and the closest point in a bigger subspace can only be closer. This is why training error is a poor guide to model quality.
+- **The residuals are uncorrelated with every feature in the training set**, by construction. A residual plot that shows structure against a feature that _was_ in the model is impossible. Structure against fitted values, or against a feature that was _left out_, is the real signal (see [diagnostics](#reading-residual-plots)).
+
+We can confirm the orthogonality numerically, and see one more fact that matters in practice:
+
+```python title="normal_equations.py"
+import numpy as np
+
+x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+y = np.array([20.0, 40.0, 50.0, 40.0, 50.0])
+
+# Design matrix: one row per example, a column of ones for the intercept.
+X = np.column_stack([np.ones_like(x), x])          # shape (5, 2)
+
+theta, sse, rank, singular_values = np.linalg.lstsq(X, y, rcond=None)
+residuals = y - X @ theta
+
+print("theta [b, w]:", theta)
+print("X^T r       :", X.T @ residuals)            # orthogonality: ~0
+print("cond(X)     :", np.linalg.cond(X))
+print("cond(X^T X) :", np.linalg.cond(X.T @ X))
+```
+
+```text
+theta [b, w]: [22.  6.]
+X^T r       : [1.10134124e-13 3.23296945e-13]
+cond(X)     : 8.36574631273694
+cond(X^T X) : 69.98571136907188
+```
+
+$X^\top \mathbf r$ is zero up to floating-point rounding. The last two lines show why this code calls `np.linalg.lstsq` rather than writing `np.linalg.inv(X.T @ X) @ X.T @ y`. The **condition number** measures how much a matrix amplifies small errors in its input. Forming $X^\top X$ squares it: $8.37^2 \approx 70$. Here that is harmless. With nearly redundant features, $X$ might have a condition number of $10^6$, and $X^\top X$ then has $10^{12}$, at which point double-precision arithmetic has only about four trustworthy digits left. `lstsq` solves the least-squares problem directly from $X$ using an orthogonal factorisation (an SVD in NumPy and in SciPy's default `gelsd` driver), so it never squares the condition number. It also returns a sensible minimum-norm answer when $X$ is rank-deficient, where `inv` would fail or return garbage.
+
+> [!TIP]
+> The formula $(X^\top X)^{-1}X^\top \mathbf y$ is for reading and deriving, not for computing. In code, solve least-squares problems with `np.linalg.lstsq`, `scipy.linalg.lstsq` or a library that wraps them. If you must use the normal equations, `np.linalg.solve(X.T @ X, X.T @ y)` is better than an explicit inverse.
+
+## The probabilistic view: least squares as maximum likelihood
+
+So far squared error has been a reasonable design choice. There is a deeper reason for it, and it also tells us what least squares implicitly assumes.
+
+Suppose the data really are generated by a line plus random noise:
+
+$$
+y_i = \boldsymbol\theta^\top \mathbf x_i + \varepsilon_i, \qquad \varepsilon_i \sim \mathcal N(0, \sigma^2) \text{ independently}
+$$
+
+Here $\mathbf x_i$ is row $i$ of $X$ (including the leading 1), and $\varepsilon_i$ is noise drawn from a normal distribution with mean zero and the same variance $\sigma^2$ for every example. Under this model, $y_i$ is normally distributed around the line, with density
+
+$$
+p(y_i \mid \mathbf x_i; \boldsymbol\theta) = \frac{1}{\sqrt{2\pi\sigma^2}} \exp\!\left( -\frac{(y_i - \boldsymbol\theta^\top \mathbf x_i)^2}{2\sigma^2} \right)
+$$
+
+**Maximum likelihood estimation** picks the parameters under which the observed data are most probable. Because the examples are independent, the likelihood is the product of the densities. Products are awkward, so take the logarithm, which turns the product into a sum and doesn't move the maximum:
+
+$$
+\log L(\boldsymbol\theta) = -\frac{n}{2}\log(2\pi\sigma^2) - \frac{1}{2\sigma^2} \sum_{i=1}^n (y_i - \boldsymbol\theta^\top \mathbf x_i)^2
+$$
+
+The first term doesn't depend on $\boldsymbol\theta$. The second is a negative constant times the sum of squared residuals. **Maximising the log-likelihood is exactly minimising the sum of squared errors.** Least squares is the maximum-likelihood estimator for a linear model with independent Gaussian noise of constant variance. This derivation is the starting point of the linear models chapter in the [Stanford CS229 notes](https://cs229.stanford.edu/main_notes.pdf).
+
+This turns the loss function from a choice into a modelling statement, and it shows how to change it:
+
+| If you believe the noise is…                        | Maximum likelihood gives you…                                   |
+| --------------------------------------------------- | --------------------------------------------------------------- |
+| Gaussian, constant variance                         | Least squares (MSE)                                             |
+| Laplace (heavier tails, occasional large errors)    | Least absolute deviations (MAE): predicts the median            |
+| Gaussian, but with variance that differs by example | Weighted least squares, each example weighted by $1/\sigma_i^2$ |
+| A mixture with rare large outliers                  | Robust losses such as Huber                                     |
+
+### What least squares assumes, and what each assumption buys
+
+The probabilistic model packs in several assumptions. They are often presented as a checklist that must hold before you may use linear regression. That is misleading: different assumptions are needed for different purposes.
+
+| Assumption                                                                    | Needed for                                                      | If it fails                                                                                          |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Linearity**: $\mathbb E[y \mid \mathbf x]$ is linear in $\boldsymbol\theta$ | Everything. The model is wrong otherwise.                       | Systematic bias. Fix with feature transforms (logs, polynomials, interactions).                      |
+| **Full column rank**: no feature is an exact combination of others            | A unique solution                                               | Infinitely many solutions; coefficients not identifiable.                                            |
+| **Independent errors**                                                        | Correct standard errors and tests                               | Coefficients still fine on average, but confidence intervals far too narrow (common in time series). |
+| **Constant variance** (homoscedasticity)                                      | OLS being the most efficient estimator; correct standard errors | Coefficients still unbiased; use robust standard errors or weighted least squares.                   |
+| **Normal errors**                                                             | Exact $t$ and $F$ tests and intervals in small samples          | Point estimates and predictions unaffected; inference approximately valid for large $n$.             |
+
+The Gauss–Markov theorem ([_Elements of Statistical Learning_](https://hastie.su.domains/ElemStatLearn/), §3.2.2) says that under the first four assumptions (normality not required), the least-squares estimator is **BLUE**: the Best Linear Unbiased Estimator. Among all estimators that are linear in $\mathbf y$ and unbiased, it has the smallest variance. Two words in that sentence matter later. _Unbiased_: ridge regression deliberately gives up unbiasedness and often wins on variance. _Linear_: nothing is promised about non-linear estimators.
+
+> [!IMPORTANT]
+> If all you need is predictions, the normality assumption is irrelevant. It matters when you report p-values or confidence intervals for coefficients. Linearity and independence are the assumptions that quietly break predictive models.
+
+## Learning the parameters with gradient descent
+
+The normal equations solve linear regression in one step. So why learn an iterative method at all?
+
+Because the closed form costs roughly $O(np^2 + p^3)$: building or factorising an $n \times p$ problem, then solving a $p \times p$ system. With millions of examples that don't fit in memory, millions of sparse features, or data arriving as a stream, that is impractical. And as soon as the model stops being linear regression, with a different loss, a neural network or almost anything else, there is no closed form at all. Gradient descent is how nearly every modern model is trained, and linear regression is the cleanest place to see exactly how it behaves, because here we can predict its behaviour precisely.
+
+### The update rule
+
+The gradient $\nabla J(\boldsymbol\theta)$ is a vector of partial derivatives: it points in the direction in which $J$ increases fastest, and its length is how steep the increase is. To go downhill, step the other way:
+
+$$
+\boldsymbol\theta_{t+1} = \boldsymbol\theta_t - \alpha \nabla J(\boldsymbol\theta_t) = \boldsymbol\theta_t - \alpha \cdot \frac{2}{n} X^\top (X\boldsymbol\theta_t - \mathbf y)
+$$
+
+- $t$ counts iterations.
+- $\alpha > 0$ is the **learning rate**, or step size.
+- $X\boldsymbol\theta_t - \mathbf y$ is the vector of current prediction errors.
+- Multiplying by $X^\top$ correlates the errors with each feature. If predictions are too high wherever $x_j$ is large, the $j$-th component of the gradient is positive, and the update lowers $w_j$.
+
+For the single-feature case, written out component by component:
+
+$$
+w \leftarrow w - \alpha \cdot \frac{2}{n}\sum_i (\hat y_i - y_i)\, x_i, \qquad
+b \leftarrow b - \alpha \cdot \frac{2}{n}\sum_i (\hat y_i - y_i)
+$$
+
+```mermaid caption="Batch gradient descent: every step uses the whole training set."
+flowchart TD
+    A[Initialise θ, e.g. zeros] --> B["Predict: ŷ = Xθ"]
+    B --> C["Errors: e = ŷ − y"]
+    C --> D["Gradient: g = (2/n) Xᵀe"]
+    D --> E["Update: θ ← θ − α g"]
+    E --> F{"‖g‖ small enough?"}
+    F -->|No| B
+    F -->|Yes| G[Return θ]
+    class D key
+```
+
+### How the learning rate controls everything
+
+Because $J$ is exactly quadratic, we can analyse gradient descent completely. Let $\mathbf e_t = \boldsymbol\theta_t - \hat{\boldsymbol\theta}$ be the distance from the optimum. Since $\nabla J(\hat{\boldsymbol\theta}) = \mathbf 0$ and the gradient is linear in $\boldsymbol\theta$, $\nabla J(\boldsymbol\theta_t) = H\mathbf e_t$ with $H = \frac{2}{n}X^\top X$. Substituting into the update:
+
+$$
+\mathbf e_{t+1} = (I - \alpha H)\, \mathbf e_t
+$$
+
+Decompose $\mathbf e_t$ along the eigenvectors of $H$. Each eigenvector is a direction in parameter space: one of the axes of the elliptical contours you will see below. Its eigenvalue $\lambda_k$ is the curvature of the bowl in that direction. Along direction $k$, every step multiplies the error by the same factor:
+
+$$
+e^{(k)}_{t+1} = (1 - \alpha\lambda_k)\, e^{(k)}_t
+$$
+
+Everything about the learning rate follows from that one factor:
+
+- **$0 \lt \alpha \lt 1/\lambda_k$**: the factor is between 0 and 1. The error shrinks smoothly, without overshooting.
+- **$1/\lambda_k \lt \alpha \lt 2/\lambda_k$**: the factor is between $-1$ and $0$. The error still shrinks, but changes sign every step: the iterate jumps back and forth across the valley. This is the familiar zig-zag.
+- **$\alpha \gt 2/\lambda_k$**: the factor's magnitude exceeds 1. The error **grows** every step, and gradient descent diverges.
+
+The condition must hold in every direction at once, so the steepest direction sets the limit:
+
+$$
+0 \lt \alpha \lt \frac{2}{\lambda_{\max}(H)}
+$$
+
+But the _flattest_ direction sets the speed, because there the factor $1 - \alpha\lambda_{\min}$ is closest to 1. The ratio $\kappa = \lambda_{\max}/\lambda_{\min}$, the condition number of the Hessian, measures the conflict. Even with the best possible fixed learning rate, the slowest direction shrinks by only a factor of $(\kappa - 1)/(\kappa + 1)$ per step. Gradient descent on a poorly conditioned problem is slow no matter how you tune $\alpha$. The analysis of gradient descent on quadratic functions in [Boyd and Vandenberghe's _Convex Optimization_](https://web.stanford.edu/~boyd/cvxbook/) (§9.3) develops this in general.
+
+### Why centring the feature helps
+
+For the courier data, the Hessian is
+
+$$
+H = \frac{2}{n}X^\top X = \frac{2}{5}\begin{bmatrix} 5 & 15 \\ 15 & 55 \end{bmatrix} = \begin{bmatrix} 2 & 6 \\ 6 & 22 \end{bmatrix}
+$$
+
+(rows and columns ordered $b, w$). Its eigenvalues are about $23.66$ and $0.338$: a condition number of 70. The off-diagonal 6 is the culprit. Because all the distances are positive, increasing $w$ raises every prediction, much as increasing $b$ does. The two parameters are entangled, and the loss bowl is a long, thin, tilted valley.
+
+Replace $x$ with $x - \bar x$. The column of centred distances sums to zero, so it is orthogonal to the column of ones, and the off-diagonal entry vanishes:
+
+$$
+H_{\text{centred}} = \frac{2}{5}\begin{bmatrix} 5 & 0 \\ 0 & 10 \end{bmatrix} = \begin{bmatrix} 2 & 0 \\ 0 & 4 \end{bmatrix}
+$$
+
+The condition number drops from 70 to 2. Centring doesn't change which lines the model can draw. It reparameterises them: $b$ now means "predicted time at the average distance", which is simply $\bar y = 40$ at the optimum. But it turns the long thin valley into a nearly round bowl, and gradient descent heads almost straight for the bottom.
+
+Try it. The stability limit shown next to the slider is $2/\lambda_{\max}$, computed from the data. Each preset sets $\alpha$ as a fraction of that limit, so you can compare the raw and centred problems on equal terms.
+
+<GradientDescentLab />
+
+Things worth seeing for yourself:
+
+1. **Raw feature, 0.5 × limit.** The path drops quickly along the steep direction, then crawls along the valley floor for hundreds of steps. The log-scale loss curve is a straight line, because linear convergence means a constant factor per step, and its slope is set by $1 - \alpha\lambda_{\min}$.
+2. **Raw feature, 0.9 × limit.** Now $\alpha \gt 1/\lambda_{\max}$, so the steep direction zig-zags, but it still converges.
+3. **Raw feature, 1.05 × limit.** Just over the line. The first few steps look fine, because the slow direction is still improving, then the oscillation across the valley grows without bound.
+4. **Centred feature, any preset.** Same data, same model family. At 0.5 × limit the raw problem needs over 600 steps to converge; the centred one needs 16.
+
+The same comparison, as a script:
+
+```python title="gradient_descent.py"
+import numpy as np
+
+def gradient_descent(X, y, lr, steps, tol=1e-8):
+    """Batch gradient descent on J(theta) = mean((X @ theta - y) ** 2)."""
+    n, d = X.shape
+    theta = np.zeros(d)
+    for step in range(1, steps + 1):
+        residuals = X @ theta - y
+        grad = (2.0 / n) * X.T @ residuals
+        theta -= lr * grad
+        if np.linalg.norm(grad) < tol:
+            return theta, step
+    return theta, steps
+
+x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+y = np.array([20.0, 40.0, 50.0, 40.0, 50.0])
+n = len(x)
+
+X_raw = np.column_stack([np.ones(n), x])
+X_centered = np.column_stack([np.ones(n), x - x.mean()])
+
+for name, X in [("raw", X_raw), ("centered", X_centered)]:
+    hessian = (2.0 / n) * X.T @ X
+    eigenvalues = np.linalg.eigvalsh(hessian)
+    max_lr = 2.0 / eigenvalues.max()
+    lr = 0.9 * max_lr                      # just inside the stable range
+    theta, steps = gradient_descent(X, y, lr=lr, steps=100_000)
+    print(f"{name:>8}: eigenvalues={np.round(eigenvalues, 3)}, "
+          f"lr={lr:.4f}, steps={steps}, theta={np.round(theta, 4)}")
+```
+
+```text
+     raw: eigenvalues=[ 0.338 23.662], lr=0.0761, steps=781, theta=[22.  6.]
+centered: eigenvalues=[2. 4.], lr=0.4500, steps=98, theta=[40.  6.]
+```
+
+Both runs reach the same slope, $w = 6$. The intercepts differ only because they mean different things: $22 + 6x$ and $40 + 6(x - 3)$ are the same line. The centred problem needs 98 steps instead of 781.
+
+With many features on wildly different scales, say age in years next to income in dollars, the Hessian's diagonal entries differ by factors of millions, and the conditioning problem is far worse than here. That is the real reason to **standardise** features (subtract the mean, divide by the standard deviation) before gradient descent. It is not that the model needs it: the closed-form solution gives identical predictions with or without scaling. The optimiser needs it.
+
+### Stochastic and mini-batch gradient descent
+
+The update above touches all $n$ examples every step. **Stochastic gradient descent** (SGD) estimates the gradient from one randomly chosen example, and **mini-batch** gradient descent from a small random batch, typically 32 to 1024 examples. Each step is far cheaper and the gradient estimate is noisy but unbiased. In practice the learning rate is decayed over time so the noise settles. scikit-learn's [`SGDRegressor`](https://scikit-learn.org/stable/modules/linear_model.html) implements this for linear models and is the right tool when the data are too large for `LinearRegression`. Neural networks are trained with minibatch variants of the same update.
+
+> [!WARNING]
+> A loss that suddenly jumps to `inf` or `nan` a few iterations into training is almost always a learning rate above $2/\lambda_{\max}$, made worse by unscaled features. Standardise first, then lower $\alpha$.
+
+## From scratch to scikit-learn, on real data
+
+The courier data were invented to be easy to compute by hand. Now for something real.
+
+The **diabetes dataset** ships with scikit-learn and comes from [Efron, Hastie, Johnstone and Tibshirani (2004)](https://doi.org/10.1214/009053604000000067), the paper that introduced least-angle regression. It has 442 patients. For each there are ten baseline measurements: age, sex, body-mass index (`bmi`), average blood pressure (`bp`) and six blood-serum measurements (`s1`–`s6`, including total cholesterol, LDL, HDL and a triglyceride measure). The target is a quantitative measure of disease progression one year later. One quirk matters for interpreting the results: the [documentation](https://scikit-learn.org/stable/modules/generated/sklearn.datasets.load_diabetes.html) notes that every feature has already been mean-centred and scaled so that its sum of squares is 1.
+
+The experiment:
+
+- **Split:** 80% training (353 patients), 20% test (89), `random_state=42`. The test set is not touched until the end.
+- **Stage 1, from scratch:** append a column of ones and call `np.linalg.lstsq`.
+- **Stage 2, library:** `sklearn.linear_model.LinearRegression`.
+- **Baseline:** always predict the training-set mean. Any model must beat this to be worth anything.
+- **Metrics:** MAE, RMSE and $R^2$ on the test set, explained in the next section.
+
+```python title="diabetes_experiment.py"
+import numpy as np
+from sklearn.datasets import load_diabetes
+from sklearn.dummy import DummyRegressor
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.model_selection import train_test_split
+
+X, y = load_diabetes(return_X_y=True, as_frame=True)
+print(X.shape, "target range:", y.min(), "to", y.max())
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
+# From scratch: append a column of ones and solve least squares.
+A_train = np.column_stack([np.ones(len(X_train)), X_train])
+theta, *_ = np.linalg.lstsq(A_train, y_train, rcond=None)
+
+# Library version.
+model = LinearRegression().fit(X_train, y_train)
+print("max |coef difference| :", np.abs(theta[1:] - model.coef_).max())
+print("intercept difference  :", abs(theta[0] - model.intercept_))
+
+baseline = DummyRegressor(strategy="mean").fit(X_train, y_train)
+
+for name, est in [("predict the mean", baseline), ("linear regression", model)]:
+    pred = est.predict(X_test)
+    mae = mean_absolute_error(y_test, pred)
+    rmse = np.sqrt(mean_squared_error(y_test, pred))
+    r2 = r2_score(y_test, pred)
+    print(f"{name:>18}: MAE={mae:6.2f}  RMSE={rmse:6.2f}  R^2={r2:6.3f}")
+
+for name, coef in sorted(zip(X.columns, model.coef_), key=lambda t: -abs(t[1])):
+    print(f"  {name:>4}: {coef:8.1f}")
+```
+
+```text
+(442, 10) target range: 25.0 to 346.0
+max |coef difference| : 2.9558577807620168e-12
+intercept difference  : 4.263256414560601e-13
+  predict the mean: MAE= 64.01  RMSE= 73.22  R^2=-0.012
+ linear regression: MAE= 42.79  RMSE= 53.85  R^2= 0.453
+    s1:   -931.5
+    s5:    736.2
+   bmi:    542.4
+    s2:    518.1
+    bp:    347.7
+    s4:    275.3
+   sex:   -242.0
+    s3:    163.4
+    s6:     48.7
+   age:     37.9
+```
+
+Run with NumPy 2.5, scikit-learn 1.9 and Python 3.12.
+
+### What the library did for you
+
+The from-scratch and library coefficients agree to about $10^{-12}$: they are the same estimator. Reading the [`LinearRegression` source](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LinearRegression.html) shows what it adds on top of a bare `lstsq` call:
+
+- **It handles the intercept by centring**, not by appending a column of ones. It subtracts the feature means and target mean, solves for the slopes without an intercept, then recovers $b = \bar y - \bar{\mathbf x}^\top \mathbf w$. That is the vector form of $b = \bar y - w\bar x$, and it also improves the conditioning for the reasons the gradient-descent section showed.
+- **It calls [`scipy.linalg.lstsq`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.lstsq.html)** for dense data (an SVD-based solver), or a sparse iterative solver for sparse input. It never inverts $X^\top X$.
+- **It validates input**, supports `sample_weight` (weighted least squares), multiple targets at once, and `positive=True` (non-negative least squares).
+- **It fits the estimator interface**, so it drops into pipelines, cross-validation and grid search. That matters more than any of the numerics, as the section on [leakage](#preprocessing-without-leaking) shows.
+
+What it doesn't do: no standard errors, p-values or confidence intervals. scikit-learn is built for prediction. For statistical inference on coefficients, `statsmodels`' `OLS` fits the same model and reports them.
+
+## Evaluating a regression model
+
+The script printed three metrics. Each answers a different question.
+
+**Mean absolute error** is the average size of a miss, in the target's own units:
+
+$$
+\text{MAE} = \frac{1}{n}\sum_i \lvert y_i - \hat y_i \rvert
+$$
+
+On the test set the model is off by about 43 progression units on average, against 64 for the baseline. MAE is easy to explain to non-specialists and treats all errors in proportion to their size.
+
+**Root mean squared error** is the square root of the loss we minimised:
+
+$$
+\text{RMSE} = \sqrt{\frac{1}{n}\sum_i (y_i - \hat y_i)^2}
+$$
+
+The square root puts it back in the target's units. Because errors are squared before averaging, RMSE is always at least as large as MAE, and the gap grows when a few errors are much larger than the rest. Here RMSE is 53.85 against an MAE of 42.79, a sign of a moderate tail of larger misses.
+
+**The coefficient of determination**, $R^2$, compares the model with the predict-the-mean baseline:
+
+$$
+R^2 = 1 - \frac{\sum_i (y_i - \hat y_i)^2}{\sum_i (y_i - \bar y)^2}
+$$
+
+The denominator is the error of always predicting the mean; the numerator is the model's error. $R^2 = 1$ is perfect; $R^2 = 0$ means no better than the mean. The model's $R^2$ of 0.453 says it removes about 45% of the squared error the baseline makes.
+
+On training data, least squares with an intercept guarantees $0 \le R^2 \le 1$. **On held-out data, $R^2$ can be negative.** The baseline scored $-0.012$ even though it _is_ "predict the mean", because it predicts the _training_ mean and the test set's mean is slightly different. A complex model that overfits can score far below zero on test data.
+
+**Adjusted $R^2$** penalises the number of features $p$:
+
+$$
+R^2_{\text{adj}} = 1 - (1 - R^2)\frac{n - 1}{n - p - 1}
+$$
+
+It exists because training $R^2$ can only go up when you add features, which is the projection argument from earlier. Adjusted $R^2$ corrects for that on the training set. If you have a held-out test set, plain test $R^2$ is already an honest estimate, and the adjustment adds little.
+
+| Metric | Units           | Sensitive to outliers | Use it when                                                                            |
+| ------ | --------------- | --------------------- | -------------------------------------------------------------------------------------- |
+| MAE    | Target's units  | Least                 | You want a typical miss that people can understand, or the costs of errors are linear. |
+| RMSE   | Target's units  | More                  | Large errors are disproportionately costly; it matches the training loss.              |
+| $R^2$  | None (fraction) | Like RMSE             | Comparing against the mean baseline, or across targets with different units.           |
+
+> [!NOTE]
+> Is an $R^2$ of 0.45 good? There is no universal threshold. For disease progression a year ahead from ten baseline measurements, it is a meaningful improvement over guessing; for a physics experiment it would mean something is badly wrong. Compare against a baseline and against what the problem allows. An $R^2$ that looks too good to be true usually is: check for [leakage](#preprocessing-without-leaking) first.
+
+## Reading residual plots
+
+Metrics compress a model's errors into one number. A **residual plot**, residuals against fitted values, shows their structure, and that structure tells you what to fix. Anscombe's classic [Graphs in Statistical Analysis](https://doi.org/10.1080/00031305.1973.10478966) (1973) made the point with four datasets that share the same fitted line and $R^2$ but look completely different when plotted.
+
+<Figure
+  light={residLight}
+  dark={residDark}
+  alt="Three residual-versus-fitted scatter plots. Left: residuals scatter evenly around zero with no pattern. Middle: residuals form a U shape, positive at both ends and negative in the middle. Right: residuals fan out, tightly clustered at low fitted values and widely spread at high ones."
+  caption="Synthetic data, 150 points each (seed 3), each fitted with a straight line. Left: the model is adequate. Middle: the true relationship is curved, so a straight line is systematically wrong in a predictable way. Right: the noise grows with the level of y, so constant-variance assumptions and RMSE-based intervals mislead."
+/>
+
+- **No structure** (left): the errors look like noise. The linear form is adequate.
+- **A curve** (middle): the model is missing a non-linear term. Add a transformed feature, such as $x^2$ or $\log x$, or an interaction between features. The residuals are telling you exactly what shape is missing.
+- **A funnel** (right): the error variance grows with the prediction. Common for prices, counts and anything multiplicative. Predicting $\log y$ often fixes it. Otherwise use weighted least squares, or at least robust standard errors.
+
+## Where linear regression breaks
+
+### Outliers pull hard
+
+Squared error gives an outlier influence proportional to the square of its residual. The interactive figure showed one delivery at (7 km, 10 min) flattening the slope. An outlier far out along the $x$ axis is especially dangerous: it has high **leverage**, a long lever arm to rotate the line. Before reaching for a robust loss, check whether the point is a data-entry error, a different population, or a genuine rare event. If outliers are real but shouldn't dominate, scikit-learn's `HuberRegressor` uses squared error for small residuals and absolute error for large ones.
+
+### Non-linearity, and why "linear" is broader than it looks
+
+"Linear regression" means linear in the **parameters**, not in the inputs. A model like
+
+$$
+\hat y = \theta_0 + \theta_1 x + \theta_2 x^2 + \theta_3 \log(z) + \theta_4\, x z
+$$
+
+is still linear regression: build a design matrix whose columns are $1, x, x^2, \log z, xz$ and everything in this article applies unchanged. This is how linear models capture curves and interactions.
+
+The catch is that flexible features make it easy to fit noise. The experiment below fits polynomials of increasing degree to 20 synthetic training points drawn from $y = \sin(x) + \varepsilon$, with Gaussian noise of standard deviation 0.3, and scores each model on 200 fresh validation points from the same distribution:
+
+```python title="polynomial_degree.py"
+import numpy as np
+from sklearn.linear_model import LinearRegression, RidgeCV
+from sklearn.metrics import mean_squared_error
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+
+# Synthetic: y = sin(x) + Gaussian noise (sigma = 0.3).
+# 20 training points, 200 validation points from the same distribution.
+rng = np.random.default_rng(7)
+
+def sample(n):
+    x = rng.uniform(-3, 3, size=n)
+    return x.reshape(-1, 1), np.sin(x) + 0.3 * rng.normal(size=n)
+
+X_train, y_train = sample(20)
+X_val, y_val = sample(200)
+
+def rmse(model, X, y):
+    return np.sqrt(mean_squared_error(y, model.predict(X)))
+
+def poly_model(degree, regressor):
+    return make_pipeline(
+        PolynomialFeatures(degree, include_bias=False), StandardScaler(), regressor
+    )
+
+for degree in [1, 3, 5, 9, 12]:
+    model = poly_model(degree, LinearRegression()).fit(X_train, y_train)
+    print(f"degree {degree:>2}: train RMSE = {rmse(model, X_train, y_train):.3f}, "
+          f"validation RMSE = {rmse(model, X_val, y_val):.3f}")
+
+# Same degree-12 features, with the ridge penalty tuned by CV on the training set.
+ridge = poly_model(12, RidgeCV(alphas=np.logspace(-6, 2, 50))).fit(X_train, y_train)
+print(f"degree 12 + RidgeCV: train RMSE = {rmse(ridge, X_train, y_train):.3f}, "
+      f"validation RMSE = {rmse(ridge, X_val, y_val):.3f}, alpha = {ridge[-1].alpha_:.2g}")
+```
+
+```text
+degree  1: train RMSE = 0.439, validation RMSE = 0.536
+degree  3: train RMSE = 0.207, validation RMSE = 0.383
+degree  5: train RMSE = 0.207, validation RMSE = 0.368
+degree  9: train RMSE = 0.174, validation RMSE = 1.481
+degree 12: train RMSE = 0.153, validation RMSE = 79.853
+degree 12 + RidgeCV: train RMSE = 0.213, validation RMSE = 0.433, alpha = 0.17
+```
+
+<Figure
+  light={polyLight}
+  dark={polyDark}
+  alt="Three panels of the same 20 training points with a dashed sine curve. Degree 1: a straight line that misses the curve. Degree 3: a smooth curve close to the sine. Degree 12: a curve that passes near every training point but swings far outside the plot between them, especially near the left edge."
+  caption="Synthetic data from polynomial_degree.py. Training error falls with every added degree; validation error falls, then explodes. The noise level is 0.3, so no model can expect a validation RMSE much below that."
+/>
+
+This is the clearest picture of the core tension in machine learning:
+
+- **Degree 1 underfits.** It is too rigid to follow the curve; training and validation error are both high. This is _bias_.
+- **Degrees 3 and 5 fit well.** Training error is near the noise floor of 0.3, and validation error is close behind.
+- **Degree 12 overfits.** It has the lowest training error of all, and a validation error over 200 times worse than degree 5. With 12 coefficients and 20 noisy points, it bends to chase noise, and between and beyond the training points those bends turn into enormous swings. This is _variance_.
+
+Training error decreased at every step, exactly as the projection argument guarantees. It is useless for choosing the degree. Only held-out data can do that.
+
+### Correlated features make coefficients unstable
+
+Look again at the diabetes coefficients: `s1` (total cholesterol) is $-931.5$, and `s2` (LDL cholesterol) is $+518.1$. Read naively, higher total cholesterol strongly _slows_ disease progression while higher LDL strongly speeds it. Neither statement is justified, and the reason is **multicollinearity**.
+
+LDL is a large component of total cholesterol, and the two are strongly correlated. When two features carry nearly the same information, the data pin down their _combined_ effect well but cannot say how to split it between them. A large positive weight on one and a large negative weight on the other fit almost as well as two moderate weights. In the geometry, the two columns of $X$ point in nearly the same direction, the plane they span is poorly defined, and small changes in the data swing it around.
+
+The **variance inflation factor** (VIF) quantifies this. Regress feature $j$ on all the other features and record the $R^2_j$ of that fit; then $\text{VIF}_j = 1/(1 - R^2_j)$. It is the factor by which the variance of $\hat w_j$ is inflated compared with a feature uncorrelated with the rest. To see the practical effect, refit the model on 200 bootstrap resamples of the data and watch the coefficients move:
+
+```python title="collinearity.py"
+import numpy as np
+from sklearn.datasets import load_diabetes
+from sklearn.linear_model import LinearRegression, Ridge
+
+X, y = load_diabetes(return_X_y=True, as_frame=True)
+print(f"corr(s1, s2) = {X['s1'].corr(X['s2']):.3f}")
+
+# Variance inflation factor: regress each feature on all the others.
+for col in ["s1", "s2", "s3", "s4", "s5", "bmi"]:
+    others = X.drop(columns=col)
+    r2 = LinearRegression().fit(others, X[col]).score(others, X[col])
+    print(f"VIF({col}) = {1 / (1 - r2):6.1f}")
+
+# Refit on 200 bootstrap resamples and watch the coefficients move.
+rng = np.random.default_rng(0)
+cols = list(X.columns)
+ols_coefs, ridge_coefs = [], []
+for _ in range(200):
+    idx = rng.integers(0, len(X), len(X))
+    ols_coefs.append(LinearRegression().fit(X.iloc[idx], y.iloc[idx]).coef_)
+    ridge_coefs.append(Ridge(alpha=0.1).fit(X.iloc[idx], y.iloc[idx]).coef_)
+
+for name, coefs in [("OLS", ols_coefs), ("Ridge(alpha=0.1)", ridge_coefs)]:
+    coefs = np.array(coefs)
+    for col in ["s1", "s2", "bmi"]:
+        j = cols.index(col)
+        lo, hi = np.percentile(coefs[:, j], [2.5, 97.5])
+        print(f"{name:>16} {col:>4}: 95% of refits in [{lo:7.1f}, {hi:7.1f}]")
+```
+
+```text
+corr(s1, s2) = 0.897
+VIF(s1) =   59.2
+VIF(s2) =   39.2
+VIF(s3) =   15.4
+VIF(s4) =    8.9
+VIF(s5) =   10.1
+VIF(bmi) =    1.5
+             OLS   s1: 95% of refits in [-1577.6,   -45.2]
+             OLS   s2: 95% of refits in [ -120.9,  1074.1]
+             OLS  bmi: 95% of refits in [  406.7,   637.1]
+Ridge(alpha=0.1)   s1: 95% of refits in [ -164.5,     4.5]
+Ridge(alpha=0.1)   s2: 95% of refits in [ -158.8,    20.8]
+Ridge(alpha=0.1)  bmi: 95% of refits in [  385.8,   592.4]
+```
+
+The `s2` coefficient changes sign depending on which patients happen to be in the sample, and `s1` ranges over a factor of 35. Meanwhile `bmi`, with a VIF of 1.5, is stable. A common rule of thumb flags VIFs above 5 or 10 as problematic; it is a heuristic, not a test, but values of 40 to 60 are unambiguous.
+
+Two points are easy to miss:
+
+- **Multicollinearity damages interpretation, not necessarily prediction.** The _sum_ of the correlated effects is well determined, so predictions on data like the training data can still be good.
+- **It is also why diabetes coefficients are so large.** The features are scaled so that each column has unit length, which means a one-unit change is roughly the full range of the feature across all 442 patients. Coefficients are only comparable after the features are put on a common scale, and only meaningful causally when the study design supports it.
+
+> [!WARNING]
+> A regression coefficient measures association with the target holding the other _included_ features fixed. It is not a causal effect, and it can change sign when you add or remove a correlated feature. Don't read coefficients as "importance", let alone "impact", without thinking about what else is in, and not in, the model.
+
+## Regularisation: trading a little bias for a lot of stability
+
+Both failure modes above, wild polynomial coefficients and unstable correlated ones, involve coefficients that grow large to chase small improvements in training error. **Regularisation** adds a penalty on coefficient size to the loss.
+
+**Ridge regression** ([Hoerl and Kennard, 1970](https://doi.org/10.1080/00401706.1970.10488634)) penalises the squared length of the weight vector:
+
+$$
+J_{\text{ridge}}(\boldsymbol\theta) = \frac{1}{n}\lVert \mathbf y - X\boldsymbol\theta \rVert^2 + \lambda \lVert \mathbf w \rVert^2
+$$
+
+Here $\lambda \ge 0$ controls the strength; scikit-learn calls it `alpha`, and scales the data term slightly differently. The intercept is conventionally left unpenalised. Repeating the normal-equations derivation adds $\lambda$ times an identity matrix to $X^\top X$, which makes it invertible even when the features are perfectly collinear:
+
+$$
+\hat{\boldsymbol\theta}_{\text{ridge}} = (X^\top X + n\lambda I)^{-1} X^\top \mathbf y
+$$
+
+Geometrically, adding $n\lambda$ to every eigenvalue lifts the flat directions of the loss bowl. The ill-determined combinations, such as "$s_1$ up, $s_2$ down", are exactly the low-eigenvalue directions, and they get shrunk the most. That is why the ridge rows in the bootstrap output above are so much tighter: `s1` moves from $[-1578, -45]$ to $[-165, 5]$.
+
+**Lasso** ([Tibshirani, 1996](https://doi.org/10.1111/j.2517-6161.1996.tb02080.x)) penalises the sum of absolute values, $\lambda \sum_j \lvert w_j \rvert$, instead. Its kink at zero sets some coefficients _exactly_ to zero, so it performs feature selection. It has no closed form; scikit-learn fits it by coordinate descent. **Elastic net** mixes the two penalties.
+
+Because the penalty depends on coefficient size, and coefficient size depends on feature units, **regularised models need standardised features.** This is the case where scaling changes the answer, not just the optimiser's speed.
+
+$\lambda$ is a **hyperparameter**: it is not learned from the training loss, which always prefers $\lambda = 0$. It must be chosen with data the model wasn't fitted on, usually by cross-validation. `RidgeCV` does that efficiently.
+
+Does ridge improve _prediction_ on the diabetes data? It is worth checking rather than assuming:
+
+```python title="ridge_cv.py"
+import numpy as np
+from sklearn.datasets import load_diabetes
+from sklearn.linear_model import LinearRegression, RidgeCV
+from sklearn.model_selection import KFold, cross_val_score, train_test_split
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+X, y = load_diabetes(return_X_y=True, as_frame=True)
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
+cv = KFold(n_splits=5, shuffle=True, random_state=0)
+candidates = {
+    "OLS": make_pipeline(StandardScaler(), LinearRegression()),
+    "RidgeCV": make_pipeline(
+        StandardScaler(), RidgeCV(alphas=np.logspace(-3, 3, 50))
+    ),
+}
+
+# Model selection uses only the training set; the scaler is refit inside
+# every fold because it is part of the pipeline.
+for name, pipe in candidates.items():
+    scores = cross_val_score(
+        pipe, X_train, y_train, cv=cv, scoring="neg_root_mean_squared_error"
+    )
+    print(f"{name:>8}: CV RMSE = {-scores.mean():.2f} ± {scores.std():.2f}")
+
+ridge = candidates["RidgeCV"].fit(X_train, y_train)
+print(f"chosen alpha: {ridge[-1].alpha_:.3f}")
+```
+
+```text
+     OLS: CV RMSE = 54.94 ± 2.39
+ RidgeCV: CV RMSE = 55.19 ± 2.46
+chosen alpha: 1.151
+```
+
+No. The difference is far smaller than the fold-to-fold spread. With 353 training examples and only 10 features, ordinary least squares isn't overfitting much, so there is little variance for ridge to remove. That is a useful result in itself: on this dataset, ridge's value is **stable, interpretable coefficients**, not better predictions. In the polynomial experiment, with 12 features and 20 examples, it was the difference between a validation RMSE of 79.9 and 0.43. How much regularisation helps depends on the ratio of parameters to data.
+
+## Preprocessing without leaking
+
+The ridge script fits the `StandardScaler` inside a `Pipeline`, and passes the pipeline, not pre-scaled data, to `cross_val_score`. That is deliberate.
+
+Standardising uses the mean and standard deviation of the data. If you compute them on the full dataset before splitting, the test rows have influenced the training features. That is **data leakage**: information from the evaluation data reaching the model, which makes evaluation scores optimistic. For a scaler the effect is usually small. For steps that look at the target, such as feature selection or target encoding, it can turn a useless model into one that looks excellent. scikit-learn's guide to [common pitfalls](https://scikit-learn.org/stable/common_pitfalls.html) works through examples.
+
+```mermaid caption="Every preprocessing step that learns from data is fit on training data only, inside each cross-validation fold."
+flowchart LR
+    D[(Full dataset)] --> S{Split once}
+    S --> TR[Training set]
+    S --> TE[Test set: locked away]
+    TR --> CV["Cross-validation on training set:<br/>in each fold, fit scaler + model on k−1 folds,<br/>score on the held-out fold"]
+    CV --> SEL[Choose features, degree, λ]
+    SEL --> FIT[Refit pipeline on full training set]
+    FIT --> EV[Score once on test set]
+    TE --> EV
+    class CV key
+```
+
+The rules that follow:
+
+- **Split first.** Everything learned from data (scalers, imputers, encoders, feature selection, polynomial degree, $\lambda$) is fitted on training data only.
+- **Put preprocessing in a `Pipeline`**, so cross-validation refits it in every fold automatically. Scaling the data yourself and then cross-validating leaks across folds.
+- **Touch the test set once**, at the end. Tuning anything on test scores turns it into a second validation set, and your reported score is no longer an estimate of performance on new data.
+- **Respect time.** With temporal data, a random split lets the model train on the future. Split by time, and use `TimeSeriesSplit` for cross-validation.
+- **Watch for duplicates and groups.** The same patient, user or device in both training and test inflates scores; use `GroupKFold`.
+
+## Common misconceptions
+
+**"Linear regression can only fit straight lines."** It is linear in its parameters. With transformed features it fits curves, interactions and step functions. The polynomial experiment above is linear regression throughout.
+
+**"The features (or the target) must be normally distributed."** No assumption is made about the distribution of the features at all. The normality assumption concerns the _errors_, and it matters only for small-sample inference, not for fitting or prediction.
+
+**"A larger coefficient means a more important feature."** Coefficients carry the units of their features: the metres-versus-kilometres check showed the same relationship producing coefficients 1000 times apart. Even after standardising, correlated features split their shared effect arbitrarily, as `s1` and `s2` did.
+
+**"A high $R^2$ means the model is correct."** Anscombe's quartet has identical $R^2$ for a good fit, a curve, and a line pulled by one outlier. $R^2$ also rises with every added feature on training data. Plot the residuals, and evaluate on held-out data.
+
+**"Always scale your features."** Scaling doesn't change the predictions of ordinary least squares solved in closed form. It matters for gradient-based optimisation, as conditioning showed, and it changes the answer for regularised models. Know which case you are in.
+
+**"Compute $(X^\top X)^{-1}X^\top \mathbf y$."** That is the formula, not the algorithm. It squares the condition number and fails on rank-deficient data. Use a least-squares solver.
+
+**"Linear regression is just a baseline."** It is often the right production model: it is fast to train and serve, its behaviour is predictable, it extrapolates in a known (linear) way, and its coefficients can be audited. Generalised linear models, linear layers in neural networks and the final layer of most classifiers are all built on it.
+
+## When to use it
+
+Linear regression is a strong choice when:
+
+- The relationship is roughly linear, or can be made so with sensible transformations such as logs, ratios and interactions.
+- You need to explain the model, or audit it for fairness or regulatory reasons.
+- Data are limited relative to the number of features. With regularisation, linear models are hard to beat in the small-$n$ regime.
+- Inference must be extremely cheap: a prediction is a single dot product.
+- You need a trustworthy baseline before trying anything more complex. If a gradient-boosted ensemble can't beat regularised linear regression, that tells you something about the data.
+
+Reach for something else when the relationship has strong non-linearities or high-order interactions that you can't engineer by hand (tree ensembles, neural networks), when the target is a category or a probability (logistic regression, the same idea with a different loss), or when the target is a count or strictly positive and heavily skewed (Poisson or gamma regression, which are generalised linear models).
+
+## Summary
+
+- A linear regression model is a weighted sum of features plus an intercept, $\hat{\mathbf y} = X\boldsymbol\theta$. Learning means choosing $\boldsymbol\theta$.
+- Least squares chooses the $\boldsymbol\theta$ that minimises mean squared error. Setting the gradient $\frac{2}{n}X^\top(X\boldsymbol\theta - \mathbf y)$ to zero gives the normal equations $X^\top X\boldsymbol\theta = X^\top \mathbf y$.
+- Geometrically, the fitted values are the orthogonal projection of $\mathbf y$ onto the column space of $X$; the residuals are perpendicular to every feature.
+- Probabilistically, least squares is maximum likelihood under independent Gaussian noise with constant variance. Different noise beliefs give different losses.
+- Gradient descent converges if and only if $\alpha \lt 2/\lambda_{\max}$, and its speed is set by the condition number. Centring and scaling features improve conditioning dramatically.
+- Evaluate on held-out data against a baseline. Training error only ever goes down as features are added.
+- Outliers, curvature, non-constant variance and correlated features are the main failure modes; residual plots, transformations, robust losses and regularisation are the corresponding tools.
+- Keep every data-dependent preprocessing step inside a pipeline, fitted on training data only.
+
+## Further reading
+
+**Textbooks**
+
+- Gareth James, Daniela Witten, Trevor Hastie, Robert Tibshirani and Jonathan Taylor, [_An Introduction to Statistical Learning_](https://www.statlearning.com/), chapters 3 and 6: linear regression, then regularisation and model selection, with Python labs. Free online.
+- Trevor Hastie, Robert Tibshirani and Jerome Friedman, [_The Elements of Statistical Learning_](https://hastie.su.domains/ElemStatLearn/), chapter 3: the same material with full mathematical treatment, including the Gauss–Markov theorem and the geometry of least squares.
+- Andrew Ng and Tengyu Ma, [Stanford CS229 lecture notes](https://cs229.stanford.edu/main_notes.pdf), chapter 1: least squares, gradient descent, the normal equations and the probabilistic interpretation.
+- Ian Goodfellow, Yoshua Bengio and Aaron Courville, [_Deep Learning_](https://www.deeplearningbook.org/contents/ml.html), chapter 5: linear regression as the first example of a learning algorithm, plus capacity, overfitting and regularisation.
+- Stephen Boyd and Lieven Vandenberghe, [_Convex Optimization_](https://web.stanford.edu/~boyd/cvxbook/), §9.3: convergence of gradient descent and the role of the condition number.
+
+**Papers**
+
+- Arthur E. Hoerl and Robert W. Kennard (1970), [Ridge Regression: Biased Estimation for Nonorthogonal Problems](https://doi.org/10.1080/00401706.1970.10488634), _Technometrics_. Introduced ridge regression as a fix for correlated predictors.
+- Robert Tibshirani (1996), [Regression Shrinkage and Selection via the Lasso](https://doi.org/10.1111/j.2517-6161.1996.tb02080.x), _Journal of the Royal Statistical Society, Series B_. Introduced the lasso.
+- Bradley Efron, Trevor Hastie, Iain Johnstone and Robert Tibshirani (2004), [Least Angle Regression](https://doi.org/10.1214/009053604000000067), _Annals of Statistics_. The source of the diabetes dataset ([preprint](https://web.stanford.edu/~hastie/Papers/LARS/LeastAngle_2002.pdf)).
+- F. J. Anscombe (1973), [Graphs in Statistical Analysis](https://doi.org/10.1080/00031305.1973.10478966), _The American Statistician_. The quartet that argues for plotting before trusting summary statistics.
+- Stephen M. Stigler (1981), [Gauss and the Invention of Least Squares](https://doi.org/10.1214/aos/1176345451), _Annals of Statistics_. The history of the Legendre–Gauss priority dispute.
+
+**Documentation**
+
+- scikit-learn: [Linear models user guide](https://scikit-learn.org/stable/modules/linear_model.html), [`LinearRegression`](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LinearRegression.html), [cross-validation](https://scikit-learn.org/stable/modules/cross_validation.html) and [common pitfalls](https://scikit-learn.org/stable/common_pitfalls.html).
+- NumPy [`linalg.lstsq`](https://numpy.org/doc/stable/reference/generated/numpy.linalg.lstsq.html) and SciPy [`linalg.lstsq`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.lstsq.html).
+- Google's [Machine Learning Crash Course: Linear regression](https://developers.google.com/machine-learning/crash-course/linear-regression), a gentler interactive introduction.

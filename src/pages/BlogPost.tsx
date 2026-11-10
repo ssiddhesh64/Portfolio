@@ -7,7 +7,7 @@ import React, {
 } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { findPost, neighbours } from '../data/blogData';
+import { categoryPath, findPost, neighbours } from '../data/blogData';
 import { personalInfo } from '../data/resumeData';
 import { formatPostDate } from '../lib/dates';
 import { useMetadata } from '../hooks/useMetadata';
@@ -57,47 +57,54 @@ export const BlogPost: React.FC = () => {
   const tocItems = toc?.id === post.id ? toc.items : [];
 
   return (
-    <article className="post wrap">
-      <p className="reading__back">
-        <Link to="/blog">
-          <ArrowLeft size={16} aria-hidden /> All articles
-        </Link>
-      </p>
-
-      <div className="post__layout">
-        <aside className="post__aside">
-          <TableOfContents key={post.id} items={tocItems} variant="wide" />
-        </aside>
-        <div className="post__main">
-          <header className="post__head">
-            <h1 className="post__title">{post.title}</h1>
-            <p className="post__summary">{post.summary}</p>
-            <p className="post__byline">
+    <article className="post">
+      <div className="post__band post__band--head">
+        <header className="post__col post__head">
+          <p className="reading__back">
+            <Link to="/blog">
+              <ArrowLeft size={16} aria-hidden /> All articles
+            </Link>
+          </p>
+          <h1 className="post__title">{post.title}</h1>
+          <p className="post__summary">{post.summary}</p>
+          <p className="post__byline">
+            <span>
+              {personalInfo.name} {personalInfo.lastName}
+            </span>
+            <time dateTime={post.date} className="num">
+              {formatPostDate(post.date)}
+            </time>
+            {post.updated && (
               <span>
-                {personalInfo.name} {personalInfo.lastName}
+                Updated{' '}
+                <time dateTime={post.updated} className="num">
+                  {formatPostDate(post.updated)}
+                </time>
               </span>
-              <time dateTime={post.date} className="num">
-                {formatPostDate(post.date)}
-              </time>
-              {post.updated && (
-                <span>
-                  Updated{' '}
-                  <time dateTime={post.updated} className="num">
-                    {formatPostDate(post.updated)}
-                  </time>
-                </span>
-              )}
-              <span className="num">{post.readTime}</span>
-              {post.series && (
-                <span>
-                  Part <span className="num">{post.series.order}</span> of{' '}
-                  <span className="num">{post.series.total}</span>,{' '}
-                  {post.series.name}
-                </span>
-              )}
-            </p>
-            <PostActions post={post} next={next} />
-          </header>
+            )}
+            <span className="num">{post.readTime}</span>
+            <span>
+              In{' '}
+              <Link to={categoryPath(post.category)}>
+                {post.category.title}
+              </Link>
+            </span>
+            {post.series && (
+              <span>
+                Part <span className="num">{post.series.order}</span> of{' '}
+                <span className="num">{post.series.total}</span>,{' '}
+                {post.series.name}
+              </span>
+            )}
+          </p>
+        </header>
+        <div className="post__rail post__rail--actions">
+          <PostActions post={post} next={next} />
+        </div>
+      </div>
+
+      <div className="post__band post__band--body">
+        <div className="post__col">
           <TableOfContents key={post.id} items={tocItems} variant="narrow" />
           <div className="prose" ref={body}>
             <Suspense
@@ -126,6 +133,9 @@ export const BlogPost: React.FC = () => {
             </p>
           </footer>
         </div>
+        <aside className="post__rail" aria-label="Article navigation">
+          <TableOfContents key={post.id} items={tocItems} variant="wide" />
+        </aside>
       </div>
     </article>
   );

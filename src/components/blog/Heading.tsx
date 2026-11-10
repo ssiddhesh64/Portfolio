@@ -1,21 +1,20 @@
 import React from 'react';
-import { Link2 } from 'lucide-react';
 
 type HeadingProps = React.ComponentPropsWithoutRef<'h2'>;
 
-/** Section headings carry a copyable #anchor link, shown on hover and focus. */
+/**
+ * Section headings link to themselves, so the whole heading can be clicked
+ * (or right-clicked to copy) to get a URL that lands on this section.
+ */
 const anchored = (Tag: 'h2' | 'h3' | 'h4') => {
   const Heading: React.FC<HeadingProps> = ({ id, children, ...rest }) => (
     <Tag id={id} {...rest}>
-      {children}
-      {id && (
-        <a
-          className="heading-anchor"
-          href={`#${id}`}
-          aria-label="Link to this section"
-        >
-          <Link2 size={16} aria-hidden />
+      {id ? (
+        <a className="heading-link" href={`#${id}`}>
+          {children}
         </a>
+      ) : (
+        children
       )}
     </Tag>
   );
