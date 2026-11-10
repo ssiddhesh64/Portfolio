@@ -159,7 +159,7 @@ The rest of the article fills in each arrow.
 - **`TransactionInterceptor`** is the advice: a `MethodInterceptor` that runs around each intercepted call.
 - **`BeanFactoryTransactionAttributeSourceAdvisor`** pairs the two. Its pointcut matches any method for which the attribute source returns an attribute.
 
-It also makes sure an _auto-proxy creator_ is registered. That is a `BeanPostProcessor`, and this is where transactions meet the bean lifecycle: after each bean is constructed, injected and initialised, `postProcessAfterInitialization` asks every advisor whether it applies to any of the bean's methods. If the transaction advisor does, the auto-proxy creator returns a proxy instead of the bean, and the proxy is what goes into the container and gets injected everywhere. (The [bean lifecycle article](/blog/spring_bean_lifecycle) covers that step in detail.)
+It also makes sure an _auto-proxy creator_ is registered. That is a `BeanPostProcessor`, and this is where transactions meet the bean lifecycle: after each bean is constructed, injected and initialised, `postProcessAfterInitialization` asks every advisor whether it applies to any of the bean's methods. If the transaction advisor does, the auto-proxy creator returns a proxy instead of the bean, and the proxy is what goes into the container and gets injected everywhere. (The [bean lifecycle article](/blog/spring-bean-lifecycle) covers that step in detail.)
 
 You can see the result directly:
 

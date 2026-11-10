@@ -1660,7 +1660,7 @@
     margin-top: 0.8em;
   }
 
-  /* Interactive HashSet model (blogs/java/hashset_internals) */
+  /* Interactive HashSet model (blogs/java/java-hashset-internals) */
   .prose > .hsp {
     margin-top: 1.6em;
   }
@@ -1990,7 +1990,7 @@
     margin-top: var(--space-2);
   }
 
-  /* Interactive propagation model (blogs/spring_transactional_internals) */
+  /* Interactive propagation model (blogs/spring/spring-transactional) */
   .prose > .txs {
     margin-top: 1.6em;
   }
@@ -2394,7 +2394,7 @@
   }
 }
 
-/* Interactive ML figures (blogs/linear_regression, blogs/logistic_regression) */
+/* Interactive ML figures (blogs/linear-regression, blogs/logistic-regression) */
 @layer components {
   .prose > .lrx,
   .prose > .lrx-diagram {
@@ -2682,7 +2682,7 @@
     margin-top: var(--space-2);
   }
 
-  /* Classification figures (blogs/logistic_regression) */
+  /* Classification figures (blogs/logistic-regression) */
   .lrx__curve {
     fill: none;
   }

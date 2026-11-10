@@ -61,6 +61,7 @@ const segments = (path: string) => {
 const categoryById = new Map(blogCategories.map((c) => [c.id, c]));
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function required(slug: string, data: Record<string, unknown>, key: string) {
   const value = data[key];
@@ -72,6 +73,11 @@ function required(slug: string, data: Record<string, unknown>, key: string) {
 
 function toPost(path: string, data: Record<string, unknown>) {
   const { category: categoryId, slug: id } = segments(path);
+  if (!SLUG.test(id)) {
+    throw new Error(
+      `Article "${id}": folder name must be lowercase words separated by hyphens, e.g. "linear-regression".`,
+    );
+  }
   const category = categoryById.get(categoryId);
   if (!category) {
     throw new Error(

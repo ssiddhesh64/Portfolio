@@ -19,17 +19,47 @@
     },
     {
       "source": "/blog/bean_lifecycle",
-      "destination": "/blog/spring_bean_lifecycle",
+      "destination": "/blog/spring-bean-lifecycle",
+      "permanent": true
+    },
+    {
+      "source": "/blog/spring_bean_lifecycle",
+      "destination": "/blog/spring-bean-lifecycle",
       "permanent": true
     },
     {
       "source": "/blog/github_storage",
-      "destination": "/blog/github_under_the_hood",
+      "destination": "/blog/how-git-stores-code",
+      "permanent": true
+    },
+    {
+      "source": "/blog/github_under_the_hood",
+      "destination": "/blog/how-git-stores-code",
       "permanent": true
     },
     {
       "source": "/blog/hashSetInternals",
-      "destination": "/blog/hashset_internals",
+      "destination": "/blog/java-hashset-internals",
+      "permanent": true
+    },
+    {
+      "source": "/blog/hashset_internals",
+      "destination": "/blog/java-hashset-internals",
+      "permanent": true
+    },
+    {
+      "source": "/blog/spring_transactional_internals",
+      "destination": "/blog/spring-transactional",
+      "permanent": true
+    },
+    {
+      "source": "/blog/linear_regression",
+      "destination": "/blog/linear-regression",
+      "permanent": true
+    },
+    {
+      "source": "/blog/logistic_regression",
+      "destination": "/blog/logistic-regression",
       "permanent": true
     }
   ],

@@ -11,7 +11,7 @@ export interface PageMeta {
   title: string;
   /** Meta description. Aim for 120–160 characters. */
   description: string;
-  /** Site path, e.g. "/blog/hashset_internals". Becomes the canonical URL. */
+  /** Site path, e.g. "/blog/java-hashset-internals". Becomes the canonical URL. */
   path: string;
   type?: 'website' | 'article' | 'profile';
   noindex?: boolean;
