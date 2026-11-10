@@ -18,6 +18,7 @@ import { remarkMermaid } from './plugins/mdx/remark-mermaid';
 import { rehypeCodeTitle } from './plugins/mdx/rehype-code-title';
 import { mdxFrontmatter } from './plugins/mdx/frontmatter';
 import { codeTheme } from './plugins/mdx/code-theme';
+import { prerender } from './plugins/prerender';
 
 const prettyCode: PrettyCodeOptions = {
   // rehype-pretty-code's types trail Shiki 4's; the theme object is the same.
@@ -71,5 +72,6 @@ export default defineConfig({
     mdxFrontmatter(),
     articles,
     react({ include: /\.(mdx|js|jsx|ts|tsx)$/ }),
+    prerender(),
   ],
 });

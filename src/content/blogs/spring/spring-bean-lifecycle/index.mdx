@@ -3,6 +3,8 @@ title: 'What Really Happens Before Your Spring Boot Application Starts: The Comp
 date: '2026-06-21'
 readTime: '25 min read'
 summary: 'Follow a single Spring bean from a class file on disk to a proxied, initialized singleton and finally to destruction. Using real output from a running application and the actual call sequence inside AbstractApplicationContext and AbstractAutowireCapableBeanFactory, this article explains bean definitions, BeanFactoryPostProcessors, BeanPostProcessors, dependency injection, initialization callbacks, AOP proxies, the three-level singleton cache, circular dependencies, startup events, and graceful shutdown.'
+seoTitle: 'Spring Bean Lifecycle Explained: From Class File to Shutdown'
+description: 'Follow one Spring bean from definition to destruction: BeanFactoryPostProcessors, BeanPostProcessors, dependency injection, AOP proxies and circular references.'
 tags:
   [
     'Spring Boot',

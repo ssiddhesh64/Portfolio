@@ -4,8 +4,7 @@ import { ArrowRight, Check, FileText, Link as LinkIcon } from 'lucide-react';
 import type { BlogPost } from '../../data/blogData';
 import { LinkedInIcon, XIcon } from '../BrandIcons';
 import { useCopy } from './useCopy';
-
-const SITE_URL = 'https://siddheshsawant.in';
+import { absoluteUrl } from '../../lib/site';
 
 /** The article as Markdown a reader can paste elsewhere, e.g. into an LLM. */
 const toMarkdown = (post: BlogPost, source: string, url: string) => {
@@ -22,7 +21,7 @@ interface PostActionsProps {
 }
 
 export const PostActions: React.FC<PostActionsProps> = ({ post, next }) => {
-  const url = `${SITE_URL}/blog/${post.id}`;
+  const url = absoluteUrl(`/blog/${post.id}`);
   const link = useCopy();
   const markdown = useCopy();
   // Fetched up front: Safari only allows clipboard writes that happen

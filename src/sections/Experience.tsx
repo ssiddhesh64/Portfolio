@@ -27,7 +27,8 @@ export const Experience: React.FC = () => (
           <p className="entry__facts">
             <span>{role.location}</span>
             <span>{KIND_LABEL[role.kind]}</span>
-            <span className="num">
+            {/* An ongoing role's tenure grows after the build that prerendered it. */}
+            <span className="num" suppressHydrationWarning>
               {role.tenureNote ??
                 formatTenure(monthsBetween(role.start, role.end))}
             </span>

@@ -4,6 +4,8 @@ date: '2026-06-21'
 updated: '2026-11-10'
 readTime: '15 min read'
 summary: 'Change one field on an object after putting it in a HashSet and the set can no longer find it, remove it, or stop you adding it twice. This article traces the bug through the real HashMap source: how a bucket is chosen, why every node caches its hash, what the equals/hashCode contracts actually promise, and how to prevent or recover from it.'
+seoTitle: 'Why Mutable Objects Break Java HashSet and HashMap'
+description: 'Mutate an object after adding it to a HashSet and the set can no longer find or remove it. See why in the real HashMap source and the equals/hashCode contract.'
 tags:
   [
     'Java',

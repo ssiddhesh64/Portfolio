@@ -3,6 +3,7 @@ title: 'How GitHub Stores Petabytes of Code: Under the Hood of Git'
 date: '2026-06-21'
 readTime: '18 min read'
 summary: "A deep dive into how GitHub stores and serves petabytes of source code using Git's content-addressable storage model, packfiles, delta compression, distributed architecture, and large-scale storage systems. Learn how commits, blobs, trees, and packfiles work together to efficiently manage billions of repositories and trillions of Git objects."
+description: "How Git's content-addressable objects, packfiles and delta compression let GitHub store and serve petabytes of code across billions of repositories."
 tags:
   [
     'Git',
@@ -498,6 +499,8 @@ Because Git is content-addressed, two servers can independently verify they have
 Every repository on GitHub lives on exactly **three fileservers** — its "spoke set".
 
 <Figure
+  width={720}
+  height={470}
   light={spokeSetLight}
   dark={spokeSetDark}
   alt="The Git proxy routes reads and writes to a spoke set of three fileservers, A, B and C, in racks 3, 11 and 19. Each holds a full repo.git with objects and refs. Writes need 2 of 3 replicas to agree; reads go to one healthy replica."

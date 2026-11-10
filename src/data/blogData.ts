@@ -11,7 +11,11 @@ import { blogCategories, type BlogCategory } from './blogCategories';
  * Frontmatter:
  *   title       required
  *   date        required, YYYY-MM-DD
- *   summary     required, shown as the subtitle and meta description
+ *   summary     required, shown as the subtitle
+ *   description optional meta description (aim for 120–160 characters);
+ *               defaults to the summary, which search engines truncate
+ *   seoTitle    optional shorter <title> for search results when the
+ *               headline is long; the page still shows `title`
  *   tags        optional list
  *   updated     optional YYYY-MM-DD, shown as "Updated …"
  *   readTime    optional; derived from the word count when absent
@@ -23,6 +27,10 @@ export interface BlogPost {
   title: string;
   date: string;
   summary: string;
+  /** Meta description: frontmatter `description`, or the summary. */
+  description: string;
+  /** The <title> for search results: frontmatter `seoTitle`, or the title. */
+  seoTitle: string;
   tags: string[];
   category: BlogCategory;
   readTime: string;
@@ -53,6 +61,7 @@ const segments = (path: string) => {
 const categoryById = new Map(blogCategories.map((c) => [c.id, c]));
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function required(slug: string, data: Record<string, unknown>, key: string) {
   const value = data[key];
@@ -64,6 +73,11 @@ function required(slug: string, data: Record<string, unknown>, key: string) {
 
 function toPost(path: string, data: Record<string, unknown>) {
   const { category: categoryId, slug: id } = segments(path);
+  if (!SLUG.test(id)) {
+    throw new Error(
+      `Article "${id}": folder name must be lowercase words separated by hyphens, e.g. "linear-regression".`,
+    );
+  }
   const category = categoryById.get(categoryId);
   if (!category) {
     throw new Error(
@@ -84,11 +98,20 @@ function toPost(path: string, data: Record<string, unknown>) {
     throw new Error(`Article "${id}": series needs an integer seriesOrder.`);
   }
 
+  const title = required(id, data, 'title');
+  const summary = required(id, data, 'summary');
+  const optional = (key: string) => {
+    const value = data[key];
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  };
+
   return {
     id,
-    title: required(id, data, 'title'),
+    title,
     date,
-    summary: required(id, data, 'summary'),
+    summary,
+    description: optional('description') ?? summary,
+    seoTitle: optional('seoTitle') ?? title,
     tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
     category,
     readTime: String(data.readTime),

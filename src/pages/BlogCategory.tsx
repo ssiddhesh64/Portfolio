@@ -3,6 +3,12 @@ import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { categoryPath, findCategory } from '../data/blogData';
 import { useMetadata } from '../hooks/useMetadata';
+import {
+  breadcrumbNode,
+  categoryPageNode,
+  personNode,
+  websiteNode,
+} from '../seo/schema';
 import { ArticleList } from '../components/blog/ArticleList';
 import { CategoryNav } from '../components/blog/CategoryNav';
 import { NotFound } from './NotFound';
@@ -11,14 +17,26 @@ export const BlogCategory: React.FC = () => {
   const { category: id = '' } = useParams<{ category: string }>();
   const category = findCategory(id);
 
-  useMetadata({
-    title: category
-      ? `${category.title}, Writing, Siddhesh Sawant`
-      : 'Category not found, Siddhesh Sawant',
-    description: category?.description ?? 'This category does not exist.',
-    canonicalPath: category ? categoryPath(category) : undefined,
-    noindex: !category,
-  });
+  const path = category ? categoryPath(category) : '';
+  useMetadata(
+    category
+      ? {
+          title: `${category.seoTitle ?? category.title} | Siddhesh Sawant`,
+          description: category.description,
+          path,
+          jsonLd: [
+            websiteNode(),
+            personNode(),
+            categoryPageNode(category, path, category.posts),
+            breadcrumbNode([
+              { name: 'Home', path: '/' },
+              { name: 'Writing', path: '/blog' },
+              { name: category.title, path },
+            ]),
+          ],
+        }
+      : null,
+  );
 
   if (!category) return <NotFound kind="category" />;
 

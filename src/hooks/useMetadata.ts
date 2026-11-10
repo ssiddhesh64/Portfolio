@@ -1,58 +1,30 @@
-import { useEffect } from 'react';
+import { createContext, useContext, useEffect } from 'react';
+import { applyHeadTags, headTags, type PageMeta } from '../seo/head';
 
-const SITE_URL = 'https://siddheshsawant.in';
-
-interface MetadataProps {
-  title: string;
-  description: string;
-  /** Defaults to the current path. */
-  canonicalPath?: string;
-  type?: 'website' | 'article';
-  noindex?: boolean;
+/**
+ * Set by the prerenderer (src/entry-server.tsx) to capture the page's
+ * metadata while rendering, so it lands in the static HTML <head>.
+ */
+export interface MetadataCollector {
+  set: (meta: PageMeta) => void;
 }
 
-const setMeta = (attr: 'name' | 'property', key: string, value: string) => {
-  let el = document.head.querySelector<HTMLMetaElement>(
-    `meta[${attr}="${key}"]`,
-  );
-  if (!el) {
-    el = document.createElement('meta');
-    el.setAttribute(attr, key);
-    document.head.appendChild(el);
-  }
-  el.content = value;
-};
+export const MetadataContext = createContext<MetadataCollector | null>(null);
 
-export const useMetadata = ({
-  title,
-  description,
-  canonicalPath,
-  type = 'website',
-  noindex = false,
-}: MetadataProps) => {
+/**
+ * Declares the page's <head>: title, description, canonical, Open Graph and
+ * JSON-LD. Prerendered pages already ship these tags; in the browser this
+ * replaces them after client-side navigation. Pass null to leave the head to
+ * a child, as BlogPost does when it renders <NotFound>.
+ */
+export const useMetadata = (meta: PageMeta | null) => {
+  const collector = useContext(MetadataContext);
+  if (collector && meta) collector.set(meta);
+
+  // Effects compare dependencies by identity; the serialised form changes
+  // only when the metadata does.
+  const key = meta ? JSON.stringify(meta) : '';
   useEffect(() => {
-    const path = canonicalPath ?? window.location.pathname;
-    const url = SITE_URL + (path.length > 1 ? path.replace(/\/$/, '') : '');
-
-    document.title = title;
-
-    let canonical = document.head.querySelector<HTMLLinkElement>(
-      'link[rel="canonical"]',
-    );
-    if (!canonical) {
-      canonical = document.createElement('link');
-      canonical.rel = 'canonical';
-      document.head.appendChild(canonical);
-    }
-    canonical.href = url;
-
-    setMeta('name', 'description', description);
-    setMeta('name', 'robots', noindex ? 'noindex' : 'index, follow');
-    setMeta('property', 'og:type', type);
-    setMeta('property', 'og:title', title);
-    setMeta('property', 'og:description', description);
-    setMeta('property', 'og:url', url);
-    setMeta('name', 'twitter:title', title);
-    setMeta('name', 'twitter:description', description);
-  }, [title, description, canonicalPath, type, noindex]);
+    if (key) applyHeadTags(headTags(JSON.parse(key) as PageMeta));
+  }, [key]);
 };

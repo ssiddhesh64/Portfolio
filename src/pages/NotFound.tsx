@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useMetadata } from '../hooks/useMetadata';
 
 interface NotFoundProps {
@@ -7,9 +7,11 @@ interface NotFoundProps {
 }
 
 export const NotFound: React.FC<NotFoundProps> = ({ kind = 'page' }) => {
+  const { pathname } = useLocation();
   useMetadata({
-    title: 'Not found, Siddhesh Sawant',
-    description: 'This page does not exist.',
+    title: `${kind === 'page' ? 'Page' : kind === 'article' ? 'Article' : 'Category'} not found | Siddhesh Sawant`,
+    description: 'There is nothing at this address.',
+    path: pathname,
     noindex: true,
   });
 

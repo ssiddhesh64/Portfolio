@@ -15,6 +15,8 @@ export interface PersonalInfo {
   resumeUrl: string;
   resumeFileName: string;
   resumeMeta: string;
+  /** Areas the experience above backs up. Used as Person.knowsAbout in JSON-LD. */
+  expertise: string[];
 }
 
 export interface RoleItem {
@@ -59,11 +61,13 @@ export interface EducationItem {
 export const personalInfo: PersonalInfo = {
   name: 'Siddhesh',
   lastName: 'Sawant',
-  title: 'Backend engineer',
-  focus: 'Backend engineer working in Java, Spring Boot and Kafka.',
+  title: 'Backend and machine learning engineer',
+  focus:
+    'Backend and machine learning engineer working in Java, Spring Boot, Kafka and Python.',
   intro:
-    'I spent nearly five years at Walmart Global Tech building the Spring Boot services and Kafka pipelines behind parts of its e-commerce platform. I now build backend systems as a freelancer, and write about how the frameworks underneath them actually work.',
-  availability: 'Full-time backend roles, remote or in Bangalore',
+    'I spent nearly five years at Walmart Global Tech building the Spring Boot services and Kafka pipelines behind parts of its e-commerce platform. I now build backend systems as a freelancer, and write about how the frameworks underneath them actually work and about machine learning from first principles.',
+  availability:
+    'Full-time backend or machine learning roles, remote or in Bangalore',
   location: 'Bangalore, India',
   email: 'ssiddhesh64@gmail.com',
   github: 'https://github.com/ssiddhesh64',
@@ -71,6 +75,15 @@ export const personalInfo: PersonalInfo = {
   resumeUrl: '/Siddhesh_Resume_Oct_26.pdf',
   resumeFileName: 'Siddhesh_Sawant_Resume.pdf',
   resumeMeta: 'PDF, 34 KB',
+  expertise: [
+    'Backend engineering',
+    'Microservices',
+    'Distributed systems',
+    'Event-driven architecture',
+    'REST APIs',
+    'Machine learning',
+    'Information retrieval',
+  ],
 };
 
 export const roles: RoleItem[] = [
@@ -199,6 +212,10 @@ export const skills: SkillCategory[] = [
   {
     category: 'Frameworks and messaging',
     items: ['Spring Boot', 'Kafka', 'React', 'React Native', 'Flask'],
+  },
+  {
+    category: 'Machine learning',
+    items: ['scikit-learn', 'NumPy'],
   },
   {
     category: 'Cloud and infrastructure',
