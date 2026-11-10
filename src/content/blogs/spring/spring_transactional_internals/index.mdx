@@ -1,0 +1,808 @@
+---
+title: 'What @Transactional Actually Does: Proxies, Thread-Bound Connections and the Rules of Rollback'
+date: '2026-11-10'
+readTime: '28 min read'
+summary: 'One annotation, and Spring opens a database transaction, shares its connection with every repository you call, and decides whether to commit or roll back. This article traces a single @Transactional call through the proxy, TransactionInterceptor and the transaction manager, then uses that model to explain propagation, isolation, rollback rules and the pitfalls that follow from them.'
+tags:
+  [
+    'Spring Boot',
+    'Spring Framework',
+    'Java',
+    'Transactions',
+    'Spring AOP',
+    'JDBC',
+    'JPA',
+    'Databases',
+    'Backend Engineering',
+  ]
+---
+
+import PropagationSimulator from './PropagationSimulator';
+
+This method moves money between two accounts:
+
+```java title="TransferService.java"
+@Service
+public class TransferService {
+
+    private final AccountRepository accounts;
+
+    public TransferService(AccountRepository accounts) {
+        this.accounts = accounts;
+    }
+
+    @Transactional
+    public void transfer(long fromId, long toId, BigDecimal amount) {
+        accounts.debit(fromId, amount);
+        accounts.credit(toId, amount);
+    }
+}
+```
+
+If `credit` fails, the debit is undone. Nothing in the method body says so. There is no `commit()`, no `rollback()`, no connection, and `AccountRepository` has no idea it is being called inside a transaction. Yet both statements run on the same database connection, inside one transaction, and either both stick or neither does.
+
+This article explains how. It starts with what a database transaction is at the JDBC level, because everything Spring does is a way of automating that code. Then it follows one call to `transfer()` through the proxy Spring wraps around `TransferService`, into `TransactionInterceptor`, through the transaction manager and down to the connection, and back out through commit or rollback. Once that path is clear, propagation, isolation, rollback rules and the well-known pitfalls stop being a list of rules to memorise: each one follows from how the path works.
+
+The code paths described are those of Spring Framework 6.x and 7.x with Spring Boot 3.x and 4.x. The core design has been stable since Spring 2.x; where behaviour changed between versions, the article says so.
+
+## What a transaction guarantees
+
+A transaction groups several statements into one unit that the database treats as all-or-nothing. The guarantees are usually summarised as ACID:
+
+| Property        | What it promises                                                                                                                               |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Atomicity**   | Either every statement in the transaction takes effect, or none does. A failure halfway through leaves no partial result.                      |
+| **Consistency** | The transaction moves the database from one state that satisfies its constraints to another. In practice this is mostly the application's job. |
+| **Isolation**   | Concurrent transactions don't see each other's half-finished work, to a degree set by the _isolation level_.                                   |
+| **Durability**  | Once the commit returns, the change survives a crash.                                                                                          |
+
+Spring touches atomicity and isolation directly. It decides when a transaction starts and ends, whether it ends in a commit or a rollback, and which isolation level the database is asked for. Durability and the actual enforcement of isolation are entirely the database's work.
+
+### A transaction belongs to a connection
+
+The detail that matters most for understanding Spring is this: in JDBC, a transaction is not an object you hold. It is a _mode of a connection_. By default every `Connection` is in auto-commit mode, so each statement is its own transaction and is committed as soon as it finishes. To group statements you switch auto-commit off, run them on that same connection, and then call `commit()` or `rollback()` on it[^jdbc]:
+
+```java title="TransferService.java (plain JDBC)" {4,13,15}
+public void transfer(long fromId, long toId, BigDecimal amount) throws SQLException {
+    Connection con = dataSource.getConnection();
+    try {
+        con.setAutoCommit(false);              // start grouping statements
+
+        try (PreparedStatement debit = con.prepareStatement(
+                 "UPDATE account SET balance = balance - ? WHERE id = ?");
+             PreparedStatement credit = con.prepareStatement(
+                 "UPDATE account SET balance = balance + ? WHERE id = ?")) {
+            debit.setBigDecimal(1, amount);  debit.setLong(2, fromId);   debit.executeUpdate();
+            credit.setBigDecimal(1, amount); credit.setLong(2, toId);    credit.executeUpdate();
+        }
+        con.commit();                          // both updates become visible together
+    } catch (SQLException | RuntimeException ex) {
+        con.rollback();                        // neither update happened
+        throw ex;
+    } finally {
+        con.setAutoCommit(true);               // pooled connections are reused: restore the mode
+        con.close();                           // returns it to the pool
+    }
+}
+```
+
+Two consequences follow, and Spring's design is built around both:
+
+1. **Every statement in the transaction must use the same `Connection`.** If `debit` and `credit` each borrowed their own connection from the pool, they would be in two separate transactions, and rolling one back would not touch the other.
+2. **Someone must own the begin/commit/rollback/cleanup sequence.** That code is identical for every transactional method, and it is easy to get subtly wrong (forgetting to restore auto-commit, rolling back on the wrong exceptions, leaking the connection).
+
+## What Spring has to solve
+
+Writing the code above by hand means passing a `Connection` into every repository method, or into every method that calls one. Your service layer would be about connections instead of accounts. Spring removes that in three layers, each building on the one below.
+
+**A uniform transaction API.** `PlatformTransactionManager` has three methods: `getTransaction(TransactionDefinition)`, `commit(TransactionStatus)` and `rollback(TransactionStatus)`. Implementations adapt it to a specific resource[^tx-strategy]:
+
+| Implementation                 | Used with                                   | What "begin" means                                       |
+| ------------------------------ | ------------------------------------------- | -------------------------------------------------------- |
+| `DataSourceTransactionManager` | JDBC, `JdbcTemplate`, `JdbcClient`, MyBatis | Borrow a `Connection`, `setAutoCommit(false)`            |
+| `JpaTransactionManager`        | JPA / Hibernate, Spring Data JPA            | Create an `EntityManager`, begin its `EntityTransaction` |
+| `JtaTransactionManager`        | XA transactions across several resources    | Delegate to the application server's JTA coordinator     |
+| `R2dbcTransactionManager`\*    | Reactive R2DBC                              | Same idea, but bound to the Reactor context              |
+
+\* Reactive managers implement the separate `ReactiveTransactionManager` interface.
+
+Spring Boot creates the right one for you: `JpaTransactionManager` when Spring Data JPA is on the classpath, `DataSourceTransactionManager` (in recent versions the `JdbcTransactionManager` subclass) for plain JDBC.
+
+**A place to keep the current transaction.** Spring binds the open connection to the current thread, so any code running on that thread can find it without being passed it. This is what lets `AccountRepository` stay ignorant of transactions.
+
+**Declarative demarcation.** Instead of you calling `getTransaction()`/`commit()`/`rollback()`, a proxy calls them around your method, driven by metadata from `@Transactional`.
+
+You can use the lower layers without the top one. `TransactionTemplate` gives you programmatic control with the same thread binding:
+
+```java title="TransferService.java (programmatic)"
+public void transfer(long fromId, long toId, BigDecimal amount) {
+    transactionTemplate.executeWithoutResult(status -> {
+        accounts.debit(fromId, amount);
+        accounts.credit(toId, amount);
+    });
+}
+```
+
+`@Transactional` is the same mechanism with the template moved into a proxy.
+
+## The mental model
+
+Hold on to two pictures while reading the rest of the article.
+
+**The proxy decides; the method doesn't know.** The `TransferService` other beans receive is not your class. It is a generated subclass that intercepts calls, consults the annotation, asks the transaction manager to begin or join a transaction, calls your method, and then commits or rolls back. Your method's body runs in the middle of that, unaware.
+
+**The thread carries the connection.** When the transaction manager begins a transaction, it puts the connection in a `ThreadLocal` map keyed by the `DataSource`. Every repository, `JdbcTemplate` or `EntityManager` call on that thread looks there first. That is how two repository calls end up on one connection.
+
+```mermaid caption="The pieces involved in one @Transactional call. Solid arrows are calls; dashed arrows are lookups of thread-bound state."
+flowchart LR
+    Caller["Caller<br/>(controller)"] --> Proxy["TransferService proxy<br/>(CGLIB subclass)"]
+    Proxy --> TI["TransactionInterceptor"]
+    TI -. "reads @Transactional" .-> TAS["AnnotationTransactionAttributeSource"]
+    TI --> TM["PlatformTransactionManager"]
+    TI --> Target["Your TransferService<br/>(the real object)"]
+    Target --> Repo["AccountRepository"]
+    TM -- "bind / unbind connection" --> TSM["TransactionSynchronizationManager<br/>(ThreadLocals)"]
+    Repo -. "current connection?" .-> TSM
+    TM --> DS[("DataSource /<br/>connection pool")]
+    class TI key
+```
+
+The rest of the article fills in each arrow.
+
+## How the proxy gets there
+
+`@Transactional` is passive metadata. Nothing reads it unless transaction management is enabled, which in Spring Boot happens automatically: `TransactionAutoConfiguration` applies `@EnableTransactionManagement` once a transaction manager bean exists. That annotation registers three infrastructure beans[^enable-tx]:
+
+- **`AnnotationTransactionAttributeSource`** parses `@Transactional` (and `jakarta.transaction.Transactional`) on methods and classes into a `TransactionAttribute`: propagation, isolation, timeout, read-only flag and rollback rules. Results are cached per method.
+- **`TransactionInterceptor`** is the advice: a `MethodInterceptor` that runs around each intercepted call.
+- **`BeanFactoryTransactionAttributeSourceAdvisor`** pairs the two. Its pointcut matches any method for which the attribute source returns an attribute.
+
+It also makes sure an _auto-proxy creator_ is registered. That is a `BeanPostProcessor`, and this is where transactions meet the bean lifecycle: after each bean is constructed, injected and initialised, `postProcessAfterInitialization` asks every advisor whether it applies to any of the bean's methods. If the transaction advisor does, the auto-proxy creator returns a proxy instead of the bean, and the proxy is what goes into the container and gets injected everywhere. (The [bean lifecycle article](/blog/spring_bean_lifecycle) covers that step in detail.)
+
+You can see the result directly:
+
+```java title="ProxyCheck.java"
+@Component
+class ProxyCheck implements CommandLineRunner {
+
+    private final TransferService transferService;
+
+    ProxyCheck(TransferService transferService) {
+        this.transferService = transferService;
+    }
+
+    @Override
+    public void run(String... args) {
+        System.out.println(transferService.getClass().getName());
+        System.out.println(AopUtils.isAopProxy(transferService));
+        System.out.println(AopUtils.getTargetClass(transferService).getName());
+    }
+}
+```
+
+```text
+com.example.bank.TransferService$$SpringCGLIB$$0
+true
+com.example.bank.TransferService
+```
+
+### JDK proxies and CGLIB proxies
+
+Spring can build the proxy in two ways[^proxying]:
+
+- A **JDK dynamic proxy** implements the bean's interfaces. Callers only see those interfaces, and only methods declared on them are intercepted.
+- A **CGLIB proxy** is a runtime-generated _subclass_ of your class that overrides its methods. Spring Boot uses CGLIB by default (`spring.aop.proxy-target-class=true`), whether or not the class implements interfaces[^boot-aop].
+
+Being a subclass has consequences you will meet again under pitfalls. A subclass can't override `final` methods or `private` methods, so those can never be intercepted. Since Spring Framework 6.0, `protected` and package-private methods on CGLIB proxies _are_ transactional; before 6.0 only `public` methods were[^annotations].
+
+### The proxy, written by hand
+
+Stripped of caching, reactive support and logging, the proxy for `transfer` does what this hand-written subclass does. It compiles and works as a demonstration; it is not how you should write production code:
+
+```java title="HandWrittenTransferProxy.java"
+public class HandWrittenTransferProxy extends TransferService {
+
+    private final TransferService target;
+    private final PlatformTransactionManager txManager;
+
+    public HandWrittenTransferProxy(TransferService target, PlatformTransactionManager txManager) {
+        super(null);                       // fields of the proxy itself are never used
+        this.target = target;
+        this.txManager = txManager;
+    }
+
+    @Override
+    public void transfer(long fromId, long toId, BigDecimal amount) {
+        TransactionStatus status =
+            txManager.getTransaction(new DefaultTransactionDefinition()); // PROPAGATION_REQUIRED
+        try {
+            target.transfer(fromId, toId, amount);   // the real object's method
+        } catch (RuntimeException | Error ex) {
+            txManager.rollback(status);
+            throw ex;
+        }
+        txManager.commit(status);
+    }
+}
+```
+
+Two details in it are worth fixing in memory now, because most surprises come from them. First, the proxy calls `target.transfer(...)`: once execution is inside the real object, a call to `this.somethingElse()` goes to the real object, not back through the proxy. Second, the proxy only reacts to an exception that escapes the method. Anything the method catches internally, the proxy never sees.
+
+## One call, traced end to end
+
+Here is what happens when a controller calls `transferService.transfer(1, 2, 100)` with the default `@Transactional` settings and `DataSourceTransactionManager`.
+
+```mermaid caption="A single @Transactional call with no transaction already active, ending in a commit."
+sequenceDiagram
+    autonumber
+    participant C as Controller
+    participant P as Proxy
+    participant TI as TransactionInterceptor
+    participant TM as TransactionManager
+    participant TSM as TransactionSynchronizationManager
+    participant S as TransferService (target)
+    participant R as AccountRepository
+    participant DB as Connection
+
+    C->>P: transfer(1, 2, 100)
+    P->>TI: invoke(methodInvocation)
+    TI->>TI: look up TransactionAttribute (cached)
+    TI->>TM: getTransaction(attr)
+    TM->>TSM: is a connection bound for this DataSource?
+    TSM-->>TM: no
+    TM->>DB: borrow from pool, setAutoCommit(false)
+    TM->>TSM: bind ConnectionHolder to thread
+    TM-->>TI: TransactionStatus (newTransaction = true)
+    TI->>S: proceed() → transfer(1, 2, 100)
+    S->>R: debit(1, 100)
+    R->>TSM: current connection?
+    TSM-->>R: the bound one
+    R->>DB: UPDATE … (no commit)
+    S->>R: credit(2, 100)
+    R->>DB: UPDATE … on the same connection
+    S-->>TI: returns normally
+    TI->>TM: commit(status)
+    TM->>DB: commit()
+    TM->>TSM: unbind, run afterCompletion callbacks
+    TM->>DB: restore auto-commit, close() → back to pool
+    TI-->>C: return
+```
+
+### Into the interceptor
+
+The CGLIB proxy's callback builds a chain of the advice that applies to the method and calls it. For a typical service the chain holds just `TransactionInterceptor`, whose `invoke` delegates to `TransactionAspectSupport.invokeWithinTransaction`. The heart of that method, simplified from the Spring Framework source (reactive, Kotlin coroutine and `CallbackPreferringPlatformTransactionManager` branches removed)[^tas-source]:
+
+```java title="TransactionAspectSupport.java (simplified excerpt)" {10,13,16,22}
+protected Object invokeWithinTransaction(Method method, Class<?> targetClass,
+        InvocationCallback invocation) throws Throwable {
+
+    TransactionAttributeSource tas = getTransactionAttributeSource();
+    TransactionAttribute txAttr = tas.getTransactionAttribute(method, targetClass);
+    PlatformTransactionManager ptm = asPlatformTransactionManager(determineTransactionManager(txAttr));
+    String joinpointIdentification = methodIdentification(method, targetClass, txAttr);
+
+    // Calls ptm.getTransaction(txAttr) and binds a TransactionInfo to the thread.
+    TransactionInfo txInfo = createTransactionIfNecessary(ptm, txAttr, joinpointIdentification);
+    Object retVal;
+    try {
+        retVal = invocation.proceedWithInvocation();     // your method runs here
+    }
+    catch (Throwable ex) {
+        completeTransactionAfterThrowing(txInfo, ex);    // rollback or commit, by the rules
+        throw ex;
+    }
+    finally {
+        cleanupTransactionInfo(txInfo);                  // restore the outer TransactionInfo
+    }
+    commitTransactionAfterReturning(txInfo);
+    return retVal;
+}
+```
+
+The shape is exactly the hand-written proxy's. Notice where the decision about _what kind of transaction_ to use lives: not here, but in `getTransaction`, which receives the attribute. The interceptor only knows how to wrap a call; the transaction manager knows what propagation, isolation and read-only mean.
+
+`TransactionInfo` objects form a linked stack through their `oldTransactionInfo` field. Each nested intercepted call pushes one and the `finally` block pops it, so `TransactionAspectSupport.currentTransactionStatus()` always returns the status for the innermost intercepted method.
+
+### Beginning the transaction
+
+`AbstractPlatformTransactionManager.getTransaction` is a template method shared by all managers[^aptm-source]. Its first question is whether a transaction is already active on this thread:
+
+```java title="AbstractPlatformTransactionManager.java (simplified excerpt)"
+public final TransactionStatus getTransaction(TransactionDefinition definition) {
+    Object transaction = doGetTransaction();          // wraps whatever is bound to the thread
+
+    if (isExistingTransaction(transaction)) {
+        return handleExistingTransaction(definition, transaction);   // propagation decides
+    }
+
+    // No transaction yet.
+    if (definition.getPropagationBehavior() == PROPAGATION_MANDATORY) {
+        throw new IllegalTransactionStateException(
+            "No existing transaction found for transaction marked with propagation 'mandatory'");
+    }
+    if (definition.getPropagationBehavior() == PROPAGATION_REQUIRED
+            || definition.getPropagationBehavior() == PROPAGATION_REQUIRES_NEW
+            || definition.getPropagationBehavior() == PROPAGATION_NESTED) {
+        SuspendedResourcesHolder suspendedResources = suspend(null);
+        return startTransaction(definition, transaction, false, debugEnabled, suspendedResources); // calls doBegin()
+    }
+    // SUPPORTS, NOT_SUPPORTED, NEVER: run without a transaction
+    return prepareTransactionStatus(definition, null, true, newSynchronization, debugEnabled, null);
+}
+```
+
+For `DataSourceTransactionManager`, `doBegin` is the JDBC code from the start of this article, rearranged[^dstm-source]:
+
+1. Borrow a `Connection` from the `DataSource`.
+2. Apply the read-only flag (`Connection.setReadOnly`) and isolation level (`Connection.setTransactionIsolation`) if the attribute asks for non-defaults, remembering the previous values.
+3. `setAutoCommit(false)`, remembering that it was `true`.
+4. Record the timeout, if any, as a deadline on the `ConnectionHolder`.
+5. **Bind the `ConnectionHolder` to the thread** with `TransactionSynchronizationManager.bindResource(dataSource, holder)`.
+
+`JpaTransactionManager.doBegin` is the same idea one level up: it creates an `EntityManager`, begins its transaction through the JPA dialect (which for Hibernate also applies isolation and read-only settings to the underlying JDBC connection), and binds an `EntityManagerHolder` keyed by the `EntityManagerFactory`, plus a `ConnectionHolder` for the `DataSource` so that `JdbcTemplate` code joins the same transaction.
+
+### Where the connection lives
+
+`TransactionSynchronizationManager` is a class of static methods over a handful of `ThreadLocal`s[^tsm-source]:
+
+| ThreadLocal                        | Holds                                                                                |
+| ---------------------------------- | ------------------------------------------------------------------------------------ |
+| `resources`                        | A map from resource key (the `DataSource`, the `EntityManagerFactory`) to its holder |
+| `synchronizations`                 | Callbacks to run before and after commit or rollback                                 |
+| `currentTransactionName`           | Usually `fully.qualified.Class.method`                                               |
+| `currentTransactionReadOnly`       | The read-only flag of the current transaction                                        |
+| `currentTransactionIsolationLevel` | The isolation level, if not the default                                              |
+| `actualTransactionActive`          | Whether a real transaction is active (as opposed to an empty `SUPPORTS` scope)       |
+
+This explains a rule that otherwise sounds arbitrary: **a Spring transaction is confined to the thread that started it.** Work handed to an `@Async` method, a `CompletableFuture.supplyAsync`, a parallel stream or a virtual thread runs on another thread, where the map is empty. That work is not in your transaction.
+
+### How a repository finds the connection
+
+Data access code doesn't call `dataSource.getConnection()` directly. `JdbcTemplate` calls `DataSourceUtils.getConnection(dataSource)`, which returns the thread-bound connection if there is one and only falls back to the pool otherwise. When it is done, `DataSourceUtils.releaseConnection` returns a pool connection but leaves a transactional one open.
+
+With JPA, the `EntityManager` injected into your repositories is a shared proxy. On every call it looks up the `EntityManagerHolder` bound to the thread and forwards the call to that transaction's `EntityManager`. That is why a Spring Data repository called twice inside one `@Transactional` method sees the same persistence context and returns the same entity instances.
+
+> [!IMPORTANT]
+> Using a raw `dataSource.getConnection()` inside a `@Transactional` method gives you a _different_ connection, outside the transaction. If you need the transactional connection in JDBC code, get it through `DataSourceUtils.getConnection(dataSource)` or wrap the `DataSource` in a `TransactionAwareDataSourceProxy`.
+
+### Ending the transaction
+
+When your method returns, `commitTransactionAfterReturning` calls `commit(status)`. `AbstractPlatformTransactionManager.processCommit` runs in this order:
+
+1. `triggerBeforeCommit`: synchronization callbacks such as flushing. For JPA, Hibernate also flushes pending changes as part of the commit itself; this is when your `UPDATE` and `INSERT` statements for modified entities are actually sent, which is why a constraint violation often surfaces at commit time rather than at `save()`.
+2. `triggerBeforeCompletion`.
+3. `doCommit`: `Connection.commit()` or `EntityTransaction.commit()`. Only if `status.isNewTransaction()`; a method that merely joined an outer transaction commits nothing.
+4. `triggerAfterCommit`: this is where `@TransactionalEventListener` methods with the default `phase = AFTER_COMMIT` run.
+5. `triggerAfterCompletion`.
+6. `cleanupAfterCompletion`: unbind the holder from the thread, restore auto-commit, isolation and read-only, release the connection, and resume any suspended outer transaction.
+
+Rollback (`processRollback`) has the same shape with `doRollback` in the middle, and `afterCompletion` callbacks receive `STATUS_ROLLED_BACK`.
+
+## Commit or rollback: the rules
+
+When an exception escapes your method, `completeTransactionAfterThrowing` asks the attribute: `txAttr.rollbackOn(ex)`. The default implementation is one line[^rollback]:
+
+```java title="DefaultTransactionAttribute.java"
+public boolean rollbackOn(Throwable ex) {
+    return (ex instanceof RuntimeException || ex instanceof Error);
+}
+```
+
+So by default:
+
+| What escapes the method                                          | Result                                     |
+| ---------------------------------------------------------------- | ------------------------------------------ |
+| Nothing (normal return)                                          | Commit                                     |
+| `RuntimeException` or a subclass                                 | Rollback                                   |
+| `Error` (e.g. `OutOfMemoryError`)                                | Rollback                                   |
+| Checked exception (`IOException`, your own `Exception` subclass) | **Commit**, then the exception is rethrown |
+
+The checked-exception row surprises many developers. It mirrors the EJB convention, where checked exceptions represented expected business outcomes rather than failures. Whatever its history, it means a method that throws `InsufficientFundsException extends Exception` halfway through will commit the half that already ran.
+
+### Changing the rules
+
+`rollbackFor` and `noRollbackFor` add rules, evaluated by `RuleBasedTransactionAttribute`. When several rules match, the one whose exception type is closest in the exception's class hierarchy wins; if none match, the default above applies:
+
+```java
+@Transactional(rollbackFor = InsufficientFundsException.class)
+public void transfer(long fromId, long toId, BigDecimal amount) throws InsufficientFundsException { … }
+
+@Transactional(noRollbackFor = DuplicateRequestException.class)   // a RuntimeException we treat as success
+public void submit(PaymentRequest request) { … }
+```
+
+To roll back on every exception, set `rollbackFor = Exception.class`. If you want that everywhere, define a composed annotation (an annotation meta-annotated with `@Transactional(rollbackFor = Exception.class)`) and use it instead of `@Transactional`, so the rule can't be forgotten on one method[^rollback].
+
+### Rolling back without throwing
+
+Sometimes a method should end normally, for example to return a validation error to the caller, but the work must not be committed. Mark the current transaction instead of throwing:
+
+```java
+@Transactional
+public ImportResult importBatch(List<Row> rows) {
+    ImportResult result = importer.importAll(rows);
+    if (result.hasErrors()) {
+        TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+    }
+    return result;
+}
+```
+
+When the proxy then calls `commit`, the manager sees the rollback-only flag and rolls back instead. With a `TransactionTemplate`, call `status.setRollbackOnly()` on the status passed to your callback.
+
+### Catching exceptions inside the method
+
+Because the proxy only sees exceptions that escape, this commits:
+
+```java
+@Transactional
+public void transfer(long fromId, long toId, BigDecimal amount) {
+    accounts.debit(fromId, amount);
+    try {
+        accounts.credit(toId, amount);
+    } catch (DataAccessException ex) {
+        log.error("credit failed", ex);   // swallowed: the debit is committed on its own
+    }
+}
+```
+
+The debit has executed on the transaction's connection; the method returns normally; the proxy commits. Atomicity is gone, and nothing in the logs says a transaction was involved.
+
+### The states of a transaction
+
+```mermaid caption="Status of one physical transaction. Rollback-only can be set by your code or by a participating method that failed."
+stateDiagram-v2
+    [*] --> Active: getTransaction() / doBegin()
+    Active --> RollbackOnly: setRollbackOnly()<br/>or a participant threw
+    Active --> Committed: commit() and not rollback-only
+    Active --> RolledBack: rollback()
+    RollbackOnly --> RolledBack: commit() → UnexpectedRollbackException<br/>or rollback()
+    Active --> Suspended: an inner REQUIRES_NEW / NOT_SUPPORTED starts
+    Suspended --> Active: the inner scope ends
+    Committed --> [*]
+    RolledBack --> [*]
+```
+
+## Propagation: when transactional methods call each other
+
+So far there was one transactional method. In real code, a transactional service calls other transactional services. The second proxy's `getTransaction` then finds a transaction already bound to the thread, and the `propagation` attribute decides what happens. Spring's documentation draws a useful distinction here[^propagation]:
+
+- A **physical transaction** is the real one on the database connection: one `setAutoCommit(false)`, one `commit()` or `rollback()`.
+- A **logical transaction** is the scope of one `@Transactional` method. Several logical scopes can map onto one physical transaction.
+
+`TransactionStatus.isNewTransaction()` tells you whether the current logical scope started the physical one, and only that scope commits or rolls it back.
+
+| Propagation          | If a transaction exists                         | If none exists                           |
+| -------------------- | ----------------------------------------------- | ---------------------------------------- |
+| `REQUIRED` (default) | Join it                                         | Start one                                |
+| `REQUIRES_NEW`       | Suspend it, start a new one on a new connection | Start one                                |
+| `NESTED`             | Set a savepoint inside it                       | Start one (like `REQUIRED`)              |
+| `SUPPORTS`           | Join it                                         | Run without one                          |
+| `NOT_SUPPORTED`      | Suspend it, run without one                     | Run without one                          |
+| `MANDATORY`          | Join it                                         | Throw `IllegalTransactionStateException` |
+| `NEVER`              | Throw `IllegalTransactionStateException`        | Run without one                          |
+
+```mermaid caption="What getTransaction() does, depending on whether a transaction is already bound to the thread."
+flowchart TD
+    Start["getTransaction(definition)"] --> Q{"Transaction bound<br/>to this thread?"}
+    Q -- no --> P1{"Propagation"}
+    P1 -- "REQUIRED / REQUIRES_NEW / NESTED" --> Begin["doBegin(): new physical transaction"]
+    P1 -- "SUPPORTS / NOT_SUPPORTED / NEVER" --> Empty["No transaction<br/>(empty scope)"]
+    P1 -- MANDATORY --> Err1["IllegalTransactionStateException"]
+    Q -- yes --> P2{"Propagation"}
+    P2 -- "REQUIRED / SUPPORTS / MANDATORY" --> Join["Participate:<br/>isNewTransaction = false"]
+    P2 -- REQUIRES_NEW --> Susp["suspend() outer,<br/>doBegin() on another connection"]
+    P2 -- NESTED --> SP["createSavepoint()<br/>on the same connection"]
+    P2 -- NOT_SUPPORTED --> Susp2["suspend() outer,<br/>run without one"]
+    P2 -- NEVER --> Err2["IllegalTransactionStateException"]
+    class Join key
+```
+
+The examples below use two beans. `OrderService.placeOrder()` inserts an order and calls `AuditService.record()`, which inserts an audit row.
+
+### REQUIRED: one transaction, one fate
+
+With the default propagation, `record()` joins the transaction `placeOrder()` started. Both inserts are on the same connection and commit together, which is what you want most of the time.
+
+The interesting case is failure. Suppose `record()` throws a `RuntimeException` and `placeOrder()` catches it, deciding that a failed audit shouldn't block an order:
+
+```java
+@Transactional
+public void placeOrder(Order order) {
+    orderRepository.save(order);
+    try {
+        auditService.record(order);        // @Transactional, REQUIRED
+    } catch (RuntimeException ex) {
+        log.warn("audit failed, continuing", ex);
+    }
+}
+```
+
+The order is **not** saved, and the controller receives `UnexpectedRollbackException: Transaction silently rolled back because it has been marked as rollback-only`. Walk through it with the model:
+
+1. The exception escapes `record()`, so _its_ proxy calls `completeTransactionAfterThrowing`. `rollbackOn` says roll back.
+2. But `record()`'s scope did not start the physical transaction (`isNewTransaction()` is false), so it isn't allowed to roll it back. Instead the manager marks the shared transaction **rollback-only**[^propagation]. (This is controlled by `globalRollbackOnParticipationFailure`, which defaults to `true`.)
+3. `placeOrder()` catches the exception and returns normally, so its proxy calls `commit`.
+4. The manager finds the rollback-only mark, rolls back, and throws `UnexpectedRollbackException` so that the caller isn't misled into thinking the commit happened.
+
+The exception is a feature: without it, `placeOrder()` would appear to succeed while its order silently disappeared. The fix depends on intent. If the audit failure really is acceptable, `record()` needs its own transaction (`REQUIRES_NEW`) or a savepoint (`NESTED`), so that its failure doesn't poison the outer one.
+
+### REQUIRES_NEW: an independent transaction
+
+With `REQUIRES_NEW`, the manager **suspends** the outer transaction (unbinds its connection holder and synchronizations from the thread, keeping them in a `SuspendedResourcesHolder`), borrows a second connection, and begins a separate physical transaction on it. When `record()` finishes, its transaction commits or rolls back on its own and the outer one is resumed.
+
+Use it when work must survive the outer transaction's rollback: audit logs, recording that a payment attempt happened, outbox entries for failures. Know its costs:
+
+- **The inner transaction can't see the outer one's uncommitted rows.** It is a different connection, and under any isolation level above `READ UNCOMMITTED` it won't see them. An inner insert that references an outer, not-yet-committed row through a foreign key may even block on a lock held by the suspended outer transaction, and the outer transaction is waiting for the inner one to return: a deadlock inside one thread.
+- **It holds two connections at once.** With a pool of 10 connections and 10 concurrent requests that each hold an outer connection and wait for a `REQUIRES_NEW` connection, every thread waits forever for a connection only another waiting thread could release (until the pool's acquisition timeout fires). Size the pool for the peak number of connections _per request_, not only per thread.
+- **Inner commits are final.** If `record()` committed and `placeOrder()` then rolls back, the audit row remains. That is often the point, but it means the two writes are no longer atomic.
+
+### NESTED: a savepoint inside the outer transaction
+
+`NESTED` stays on the outer transaction's connection but sets a JDBC savepoint before the inner method runs. If the inner method fails, the manager rolls back to the savepoint, undoing only the inner work, and the outer transaction carries on unmarked. If the inner method succeeds, the savepoint is released and the inner work commits or rolls back with the outer transaction.
+
+This gives you "this step may fail without spoiling the rest" without a second connection. The limitation is support: it needs savepoints, which `DataSourceTransactionManager` provides through JDBC 3.0 savepoints. `JpaTransactionManager` supports it only for the JDBC connection, and Hibernate's persistence context isn't rolled back to the savepoint, so entities changed in the nested scope stay changed in memory. `JtaTransactionManager` doesn't support nested transactions with most coordinators[^propagation].
+
+### Try it
+
+The simulator runs the `placeOrder()` / `record()` pair through the same decisions Spring makes. Pick a scenario or set each option yourself: whether the outer method is transactional, whether it calls `record()` through the other bean's proxy or on `this`, the inner propagation, how the inner method ends and whether the outer method catches. The right side shows which transactions exist on the thread and the fate of each row at the current step.
+
+<PropagationSimulator />
+
+Some combinations worth trying after the presets: `REQUIRED` with a checked exception that propagates (both rows commit, and the controller still gets the exception); `NOT_SUPPORTED` with a failure (the audit row is committed by auto-commit, so there is nothing to roll back); `NEVER` inside a transaction (the inner method never runs).
+
+> [!NOTE]
+> **Knowledge check.** `placeOrder()` is `@Transactional`; `record()` is `@Transactional(propagation = REQUIRES_NEW)`. `record()` succeeds, then `placeOrder()` throws an `IllegalStateException`. Which rows survive? _The audit row: its transaction committed when `record()` returned. The order row is rolled back._
+
+## Isolation, read-only and timeout
+
+Propagation decides _which_ transaction your code runs in. The remaining attributes configure a transaction when it is created. They are applied in `doBegin`, so they only take effect for a scope that starts a new physical transaction. A `REQUIRED` method with `isolation = SERIALIZABLE` that joins an existing `READ_COMMITTED` transaction runs at `READ_COMMITTED`, silently, unless you set `validateExistingTransaction = true` on the transaction manager, in which case the mismatch throws.
+
+### Isolation levels
+
+Isolation answers: while my transaction runs, how much of other concurrent transactions' work can I see? The SQL standard defines four levels by which _read phenomena_ they permit[^berenson]:
+
+- **Dirty read:** you read a row another transaction has written but not committed. If it rolls back, you acted on data that never existed.
+- **Non-repeatable read:** you read a row twice and get different values, because another transaction committed an update in between.
+- **Phantom read:** you run the same query twice and get a different _set_ of rows, because another transaction inserted or deleted matching rows.
+
+| `Isolation`        | Dirty read   | Non-repeatable read | Phantom read               |
+| ------------------ | ------------ | ------------------- | -------------------------- |
+| `READ_UNCOMMITTED` | Possible     | Possible            | Possible                   |
+| `READ_COMMITTED`   | Not possible | Possible            | Possible                   |
+| `REPEATABLE_READ`  | Not possible | Not possible        | Possible (by the standard) |
+| `SERIALIZABLE`     | Not possible | Not possible        | Not possible               |
+
+Real databases implement these differently from the standard's lock-based description, and usually more strictly:
+
+- **PostgreSQL** treats `READ UNCOMMITTED` as `READ COMMITTED`; its `REPEATABLE READ` is snapshot isolation and also prevents phantoms; its `SERIALIZABLE` detects dangerous patterns and aborts one transaction with a serialization failure that the application must retry[^postgres].
+- **MySQL InnoDB** defaults to `REPEATABLE READ`, using a consistent snapshot for plain reads and next-key locks for locking reads[^mysql].
+- The default `Isolation.DEFAULT` means "don't call `setTransactionIsolation`": you get the database's default, which is `READ COMMITTED` for PostgreSQL, Oracle and SQL Server, and `REPEATABLE READ` for MySQL.
+
+Raising isolation is not free: stricter levels mean more locking or more aborted transactions under contention. Many applications run at the default and handle the specific races they care about with explicit locking (`SELECT … FOR UPDATE`, JPA `@Lock`) or optimistic version columns (`@Version`).
+
+### readOnly
+
+`readOnly = true` is a hint, and what it does depends on the stack:
+
+- `DataSourceTransactionManager` calls `Connection.setReadOnly(true)`; some drivers use that to route to a replica or to optimise. With `enforceReadOnly = true` it also issues `SET TRANSACTION READ ONLY`, so the database rejects writes.
+- With Hibernate, Spring sets the session's flush mode to `MANUAL` and marks it default-read-only, so Hibernate skips dirty checking and keeps no snapshots of loaded entities. For large read-mostly transactions, that saves real memory and CPU.
+
+It does not, on its own, guarantee that no writes happen.
+
+### timeout
+
+`timeout` (in seconds) sets a deadline for the transaction. Spring applies the remaining time as a statement query timeout to each JDBC statement executed through `JdbcTemplate` or the JPA provider, and checks the deadline before statements run. It can't interrupt your Java code between statements: a transaction that spends a minute calling a slow HTTP service and then runs a fast query will fail at that query, not during the HTTP call.
+
+## Pitfalls, and why each one happens
+
+Each of these follows from the model: a proxy around the object, deciding at the boundary, with the connection carried by the thread.
+
+### Calling a transactional method on `this`
+
+```java
+@Service
+public class OrderService {
+
+    public void placeOrders(List<Order> orders) {
+        for (Order o : orders) {
+            placeOrder(o);                 // this.placeOrder(o): not through the proxy
+        }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void placeOrder(Order order) { … }
+}
+```
+
+Once execution is inside the real `OrderService`, `this` is the real object. The call to `placeOrder` never passes through the proxy, so its annotation is ignored: no new transaction per order. If `placeOrders` itself isn't transactional, each repository call auto-commits on its own[^proxying].
+
+Fixes, in rough order of preference:
+
+1. Move `placeOrder` to a separate bean and inject it. This is almost always the clearest design.
+2. Use a `TransactionTemplate` inside the loop for explicit per-item transactions.
+3. Inject the bean into itself (`@Lazy` on a self-reference, or an `ObjectProvider<OrderService>`) and call through that reference.
+4. Switch to AspectJ weaving (`@EnableTransactionManagement(mode = AdviceMode.ASPECTJ)` plus load-time or compile-time weaving), which modifies the class itself instead of proxying it, so self-calls are woven too.
+
+The same applies to calls made from a constructor or `@PostConstruct`: the proxy doesn't exist yet, or isn't the object running the code.
+
+### Methods the proxy can't intercept
+
+- **`private` methods** can't be overridden, so they are never transactional. Spring doesn't warn.
+- **`final` methods** on a CGLIB proxy are worse than ignored. The call executes the method body on the _proxy instance_ itself, an object created without running your constructor, so its injected fields are `null`. The symptom is a `NullPointerException` on a field you know is injected. Kotlin classes are `final` by default; the `kotlin-spring` compiler plugin opens Spring-annotated classes for this reason.
+- **`static` methods** aren't instance calls at all.
+- **Non-public methods before Spring 6.0** were not transactional on any proxy type. On 6.0+ `protected` and package-private methods work with CGLIB proxies, but not with JDK interface proxies[^annotations].
+
+### Objects Spring didn't create
+
+`new OrderService(...)` gives you a plain object with no proxy. The same applies to objects built by a library, JPA entities, and anything deserialised. Only beans obtained from the container are proxied.
+
+### Work on another thread
+
+As shown above, the transaction lives in `ThreadLocal`s. `@Async` methods, executor tasks, `parallelStream()` and reactive pipelines that switch schedulers run outside it. They either start their own transaction (if they pass through a transactional proxy) or auto-commit. If the outer transaction rolls back, their work does not.
+
+For the common case of "do this after the data is committed", don't spawn a thread from inside the transaction, where the new thread may run before the commit and not see the data. Publish an event and handle it with `@TransactionalEventListener`, which by default runs after commit.
+
+### Long transactions
+
+The transaction holds its connection from `doBegin` to cleanup. A `@Transactional` method that calls a remote API, sends email or waits on a queue holds a pooled connection, and often row locks, for the whole wait. Under load this shows up as pool exhaustion and lock timeouts that look like database problems. Keep remote calls outside the transactional method, or split the work so only the database part is transactional.
+
+In Spring Boot web applications with JPA, `spring.jpa.open-in-view` defaults to `true`, keeping an `EntityManager` (and, once used, its connection) open for the whole request, including view rendering. Boot logs a warning at startup for this reason. Turning it off makes lazy-loading outside transactions fail fast with `LazyInitializationException` instead of quietly holding connections.
+
+### Two annotations with the same name
+
+`org.springframework.transaction.annotation.Transactional` and `jakarta.transaction.Transactional` are both honoured. The Jakarta one has `value` (a `TxType` covering six of the seven propagation behaviours, all but `NESTED`), `rollbackOn` and `dontRollbackOn`, but no isolation, read-only, timeout or transaction manager qualifier. An IDE auto-import that picks the Jakarta annotation won't break anything until you try to set `readOnly`.
+
+### More than one transaction manager
+
+With two `DataSource`s you have two transaction managers, and a `@Transactional` without a qualifier uses the primary one. A method that writes to the secondary database through `JdbcTemplate` will find no connection bound for _that_ `DataSource` and auto-commit. Name the manager: `@Transactional("ordersTransactionManager")`. A transaction across both databases needs JTA, or a design that doesn't require it (an outbox, idempotent consumers).
+
+### Tests that pass because nothing commits
+
+`@Transactional` on a test method (or `@DataJpaTest`, which is annotated with it) wraps the test in a transaction that is **rolled back** after the test. That keeps tests isolated, but it also means the commit never happens, so commit-time behaviour is untested: Hibernate flush on commit, deferred constraints, `@TransactionalEventListener(AFTER_COMMIT)` handlers, and `REQUIRES_NEW` interactions with the test's outer transaction. Use `@Commit`, an explicit `TestTransaction.flagForCommit()` / `TestTransaction.end()`, or a non-transactional test for these.
+
+## Debugging a transaction
+
+### Turn on the logs
+
+Most transaction questions are answered by two loggers:
+
+```yaml title="application.yml"
+logging:
+  level:
+    org.springframework.transaction.interceptor: TRACE # which methods are intercepted
+    org.springframework.orm.jpa.JpaTransactionManager: DEBUG
+    # with JDBC instead of JPA:
+    # org.springframework.jdbc.support.JdbcTransactionManager: DEBUG
+```
+
+The interceptor logs `Getting transaction for [com.example.OrderService.placeOrder]` and `Completing transaction for [...]` around every intercepted method. If a method you believe is transactional never appears, it isn't going through the proxy. The manager logs its decisions, with messages such as:
+
+```text
+Creating new transaction with name [com.example.OrderService.placeOrder]: PROPAGATION_REQUIRED,ISOLATION_DEFAULT
+Participating in existing transaction
+Participating transaction failed - marking existing transaction as rollback-only
+Initiating transaction commit
+Global transaction is marked as rollback-only but transactional code requested commit
+Initiating transaction rollback
+```
+
+Read top to bottom, those six lines are the silent-rollback scenario from the propagation section. Exact wording varies a little between versions, and other lines (connection acquisition, suspension, savepoints) appear between them.
+
+### Ask the thread
+
+Inside a method, you can check what the proxy did:
+
+```java
+log.debug("tx active={}, name={}, readOnly={}",
+    TransactionSynchronizationManager.isActualTransactionActive(),
+    TransactionSynchronizationManager.getCurrentTransactionName(),
+    TransactionSynchronizationManager.isCurrentTransactionReadOnly());
+```
+
+`isActualTransactionActive()` returning `false` inside a method annotated `@Transactional` is conclusive: the call didn't go through the proxy, or the propagation (`SUPPORTS`, `NOT_SUPPORTED`, `NEVER`) means it runs without one.
+
+### Breakpoints that pay off
+
+- `TransactionAspectSupport.invokeWithinTransaction`: is the method intercepted, and with which attribute?
+- `AbstractPlatformTransactionManager.getTransaction` and `handleExistingTransaction`: what propagation decision was made?
+- `AbstractPlatformTransactionManager.processCommit` and `processRollback`: is it committing, and is `status.isGlobalRollbackOnly()` set?
+- `TransactionAspectSupport.completeTransactionAfterThrowing`: which exception, and what did `rollbackOn` return?
+
+## Knowledge check
+
+<details>
+<summary>1. A <code>@Transactional</code> method catches a <code>DataIntegrityViolationException</code> from <code>repository.save()</code> and returns normally. Using JPA, the controller still receives an exception. Why?</summary>
+
+Spring Data's `save()` is itself `@Transactional` (`REQUIRED`), so the repository's proxy saw the exception escape, and marked the shared transaction rollback-only. The outer method caught it, but at commit time the manager rolled back and threw `UnexpectedRollbackException`. (Separately, with JPA the violation may only surface at flush or commit, in which case the outer method's `try` never sees it at all.)
+
+</details>
+
+<details>
+<summary>2. Why does a <code>@Transactional</code> method that throws <code>IOException</code> commit its writes?</summary>
+
+`DefaultTransactionAttribute.rollbackOn` returns true only for `RuntimeException` and `Error`. A checked exception takes the commit path in `completeTransactionAfterThrowing`, and is then rethrown. Add `rollbackFor = IOException.class`, or `rollbackFor = Exception.class` through a composed annotation.
+
+</details>
+
+<details>
+<summary>3. A <code>@Transactional</code> method submits work to an <code>ExecutorService</code> and waits for it. The task's database writes are not rolled back when the method fails. Why?</summary>
+
+The transaction's connection is bound to the calling thread through `TransactionSynchronizationManager`'s `ThreadLocal`s. The task runs on a pool thread where nothing is bound, so its repository calls either start their own transaction or auto-commit.
+
+</details>
+
+<details>
+<summary>4. You annotate a method <code>@Transactional(isolation = Isolation.SERIALIZABLE)</code>, but the database shows it running at <code>READ COMMITTED</code>. What is the likely cause?</summary>
+
+It is called from another transactional method and joins that method's transaction (`REQUIRED`). Isolation is applied in `doBegin`, only when a physical transaction starts, so a participating scope inherits the outer level. Set `validateExistingTransaction = true` on the transaction manager to make such mismatches throw.
+
+</details>
+
+<details>
+<summary>5. Under load, requests start hanging until "Connection is not available, request timed out". The only change was adding <code>REQUIRES_NEW</code> to an audit method called from every request. What happened?</summary>
+
+Each request now holds its outer connection while waiting for a second one for the audit transaction. Once every pool connection is held by an outer transaction, every thread waits for a connection that only another waiting thread can release, until the pool times out. Enlarge the pool to cover two connections per concurrent request, or record the audit with a savepoint (`NESTED`) or after commit.
+
+</details>
+
+---
+
+## References
+
+**Official documentation**
+
+- Spring Framework: [Transaction Management](https://docs.spring.io/spring-framework/reference/data-access/transaction.html)
+- Spring Framework: [Understanding the Spring Framework Transaction Abstraction](https://docs.spring.io/spring-framework/reference/data-access/transaction/strategies.html)
+- Spring Framework: [Understanding the Spring Framework's Declarative Transaction Implementation](https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-decl-explained.html)
+- Spring Framework: [Using `@Transactional`](https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/annotations.html)
+- Spring Framework: [Transaction Propagation](https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-propagation.html)
+- Spring Framework: [Rolling Back a Declarative Transaction](https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/rolling-back.html)
+- Spring Framework: [Proxying Mechanisms](https://docs.spring.io/spring-framework/reference/core/aop/proxying.html)
+- Spring Framework: [Transaction-bound Events](https://docs.spring.io/spring-framework/reference/data-access/transaction/event.html)
+- Spring Boot: [Aspect-Oriented Programming (CGLIB proxies by default)](https://docs.spring.io/spring-boot/reference/features/aop.html)
+- Java SE: [`java.sql.Connection`](https://docs.oracle.com/en/java/javase/21/docs/api/java.sql/java/sql/Connection.html)
+
+**Source code** (the classes named in this article)
+
+- [`TransactionAspectSupport`](https://github.com/spring-projects/spring-framework/blob/main/spring-tx/src/main/java/org/springframework/transaction/interceptor/TransactionAspectSupport.java): `invokeWithinTransaction()`, `completeTransactionAfterThrowing()`
+- [`AbstractPlatformTransactionManager`](https://github.com/spring-projects/spring-framework/blob/main/spring-tx/src/main/java/org/springframework/transaction/support/AbstractPlatformTransactionManager.java): `getTransaction()`, `handleExistingTransaction()`, `processCommit()`, `processRollback()`
+- [`DataSourceTransactionManager`](https://github.com/spring-projects/spring-framework/blob/main/spring-jdbc/src/main/java/org/springframework/jdbc/datasource/DataSourceTransactionManager.java): `doBegin()`, `doCommit()`, `doCleanupAfterCompletion()`
+- [`TransactionSynchronizationManager`](https://github.com/spring-projects/spring-framework/blob/main/spring-tx/src/main/java/org/springframework/transaction/support/TransactionSynchronizationManager.java): the thread-bound resources
+- [`DefaultTransactionAttribute`](https://github.com/spring-projects/spring-framework/blob/main/spring-tx/src/main/java/org/springframework/transaction/interceptor/DefaultTransactionAttribute.java) and [`RuleBasedTransactionAttribute`](https://github.com/spring-projects/spring-framework/blob/main/spring-tx/src/main/java/org/springframework/transaction/interceptor/RuleBasedTransactionAttribute.java): rollback rules
+
+**Isolation**
+
+- H. Berenson, P. Bernstein, J. Gray, J. Melton, E. O'Neil, P. O'Neil. [A Critique of ANSI SQL Isolation Levels](https://www.microsoft.com/en-us/research/publication/a-critique-of-ansi-sql-isolation-levels/). SIGMOD 1995.
+- PostgreSQL: [Transaction Isolation](https://www.postgresql.org/docs/current/transaction-iso.html)
+- MySQL: [Transaction Isolation Levels (InnoDB)](https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html)
+
+[^jdbc]: [`java.sql.Connection`](https://docs.oracle.com/en/java/javase/21/docs/api/java.sql/java/sql/Connection.html): "By default a `Connection` object is in auto-commit mode."
+
+[^tx-strategy]: [Understanding the Spring Framework Transaction Abstraction](https://docs.spring.io/spring-framework/reference/data-access/transaction/strategies.html).
+
+[^enable-tx]: [Understanding the Spring Framework's Declarative Transaction Implementation](https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-decl-explained.html).
+
+[^proxying]: [Proxying Mechanisms](https://docs.spring.io/spring-framework/reference/core/aop/proxying.html), including the self-invocation section.
+
+[^boot-aop]: Spring Boot: [Aspect-Oriented Programming](https://docs.spring.io/spring-boot/reference/features/aop.html).
+
+[^annotations]: [Using `@Transactional`](https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/annotations.html), "Method visibility and `@Transactional`".
+
+[^tas-source]: [`TransactionAspectSupport.java`](https://github.com/spring-projects/spring-framework/blob/main/spring-tx/src/main/java/org/springframework/transaction/interceptor/TransactionAspectSupport.java).
+
+[^aptm-source]: [`AbstractPlatformTransactionManager.java`](https://github.com/spring-projects/spring-framework/blob/main/spring-tx/src/main/java/org/springframework/transaction/support/AbstractPlatformTransactionManager.java).
+
+[^dstm-source]: [`DataSourceTransactionManager.java`](https://github.com/spring-projects/spring-framework/blob/main/spring-jdbc/src/main/java/org/springframework/jdbc/datasource/DataSourceTransactionManager.java).
+
+[^tsm-source]: [`TransactionSynchronizationManager.java`](https://github.com/spring-projects/spring-framework/blob/main/spring-tx/src/main/java/org/springframework/transaction/support/TransactionSynchronizationManager.java).
+
+[^rollback]: [Rolling Back a Declarative Transaction](https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/rolling-back.html).
+
+[^propagation]: [Transaction Propagation](https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-propagation.html).
+
+[^berenson]: Berenson et al., [A Critique of ANSI SQL Isolation Levels](https://www.microsoft.com/en-us/research/publication/a-critique-of-ansi-sql-isolation-levels/), which also shows why the standard's phenomenon-based definitions are ambiguous.
+
+[^postgres]: [PostgreSQL: Transaction Isolation](https://www.postgresql.org/docs/current/transaction-iso.html).
+
+[^mysql]: [MySQL: Transaction Isolation Levels](https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html).

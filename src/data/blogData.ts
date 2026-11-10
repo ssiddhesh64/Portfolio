@@ -1,9 +1,12 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
+import { blogCategories, type BlogCategory } from './blogCategories';
 
 /**
- * Each article is a folder: content/blogs/<slug>/index.mdx, with its images
- * beside it. The folder name is the URL slug (/blog/<slug>) and must not
- * change once published.
+ * Each article is a folder inside its category's folder:
+ * content/blogs/<category>/<slug>/index.mdx, with its images beside it. The
+ * category must be registered in blogCategories.ts. The slug is the URL
+ * (/blog/<slug>), must be unique across all categories and must not change
+ * once published. Moving an article to another category keeps its URL.
  *
  * Frontmatter:
  *   title       required
@@ -21,6 +24,7 @@ export interface BlogPost {
   date: string;
   summary: string;
   tags: string[];
+  category: BlogCategory;
   readTime: string;
   updated?: string;
   series?: { name: string; order: number; total: number };
@@ -32,16 +36,21 @@ export interface BlogPost {
 type MdxModule = { default: ComponentType<{ components?: object }> };
 
 const meta = import.meta.glob<Record<string, unknown>>(
-  '../content/blogs/*/index.mdx',
+  '../content/blogs/*/*/index.mdx',
   { query: '?frontmatter', import: 'default', eager: true },
 );
-const bodies = import.meta.glob<MdxModule>('../content/blogs/*/index.mdx');
-const sources = import.meta.glob<string>('../content/blogs/*/index.mdx', {
+const bodies = import.meta.glob<MdxModule>('../content/blogs/*/*/index.mdx');
+const sources = import.meta.glob<string>('../content/blogs/*/*/index.mdx', {
   query: '?raw',
   import: 'default',
 });
 
-const slugOf = (path: string) => path.split('/').slice(-2, -1)[0];
+const segments = (path: string) => {
+  const [category, slug] = path.split('/').slice(-3, -1);
+  return { category, slug };
+};
+
+const categoryById = new Map(blogCategories.map((c) => [c.id, c]));
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -54,7 +63,13 @@ function required(slug: string, data: Record<string, unknown>, key: string) {
 }
 
 function toPost(path: string, data: Record<string, unknown>) {
-  const id = slugOf(path);
+  const { category: categoryId, slug: id } = segments(path);
+  const category = categoryById.get(categoryId);
+  if (!category) {
+    throw new Error(
+      `Article "${id}": folder "${categoryId}" is not a category. Add it to src/data/blogCategories.ts.`,
+    );
+  }
   const date = required(id, data, 'date');
   if (!DATE.test(date)) {
     throw new Error(`Article "${id}": date must be YYYY-MM-DD, got "${date}".`);
@@ -75,6 +90,7 @@ function toPost(path: string, data: Record<string, unknown>) {
     date,
     summary: required(id, data, 'summary'),
     tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
+    category,
     readTime: String(data.readTime),
     updated,
     seriesName,
@@ -85,6 +101,17 @@ function toPost(path: string, data: Record<string, unknown>) {
 }
 
 const drafts = Object.entries(meta).map(([path, data]) => toPost(path, data));
+
+const seen = new Map<string, string>();
+for (const d of drafts) {
+  const other = seen.get(d.id);
+  if (other) {
+    throw new Error(
+      `Article "${d.id}" exists in both "${other}" and "${d.category.id}". Slugs are URLs and must be unique.`,
+    );
+  }
+  seen.set(d.id, d.category.id);
+}
 
 const seriesTotals = new Map<string, number>();
 for (const d of drafts) {
@@ -114,6 +141,25 @@ const readingOrder: BlogPost[] = drafts
 export const blogPosts: BlogPost[] = [...readingOrder].reverse();
 
 export const findPost = (id: string) => blogPosts.find((p) => p.id === id);
+
+export const categoryPath = (category: BlogCategory) =>
+  `/blog/category/${category.id}`;
+
+export interface CategoryWithPosts extends BlogCategory {
+  /** Newest first. */
+  posts: BlogPost[];
+}
+
+/** Categories in registry order, each with its articles. Empty categories are left out. */
+export const categoriesWithPosts: CategoryWithPosts[] = blogCategories
+  .map((c) => ({
+    ...c,
+    posts: blogPosts.filter((p) => p.category.id === c.id),
+  }))
+  .filter((c) => c.posts.length > 0);
+
+export const findCategory = (id: string) =>
+  categoriesWithPosts.find((c) => c.id === id);
 
 /**
  * Previous and next article. Within a series they follow the series order;

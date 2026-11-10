@@ -78,8 +78,9 @@ export const CodeBlock: React.FC<PreProps> = ({
 
 /**
  * rehype-pretty-code wraps every block in a <figure>. Our CodeBlock draws its
- * own frame, so code figures render as a plain wrapper; any other <figure>
- * written in an article keeps its element.
+ * own frame, so code figures only get the code-figure class (a fence's
+ * caption="..." stays as its <figcaption>); any other <figure> written in an
+ * article keeps its element as is.
  */
 export const MdxFigure: React.FC<
   React.ComponentPropsWithoutRef<'figure'> & {
@@ -87,7 +88,7 @@ export const MdxFigure: React.FC<
   }
 > = ({ 'data-rehype-pretty-code-figure': isCode, children, ...rest }) =>
   isCode !== undefined ? (
-    <div className="code-figure">{children}</div>
+    <figure className="code-figure">{children}</figure>
   ) : (
     <figure {...rest}>{children}</figure>
   );

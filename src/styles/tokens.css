@@ -238,7 +238,7 @@
   --measure: 68ch;
   /* Line length for home-page entries, which are shorter bullet lines. */
   --measure-wide: 76ch;
-  /* Article page: how far code, figures and tables extend past the text on each side. ≥68rem. */
+  /* Article page: how far code, figures and tables extend past the right edge of the text. ≥68rem. */
   --prose-bleed: 4rem;
   /* Article page: width of the right-hand column (actions, contents). ≥68rem. */
   --rail-width: 16rem;

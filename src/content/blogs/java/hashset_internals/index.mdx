@@ -1,0 +1,501 @@
+---
+title: 'Why Mutable Objects Break HashSet: A Deep Dive into Java Hashing Internals'
+date: '2026-06-21'
+updated: '2026-11-10'
+readTime: '15 min read'
+summary: 'Change one field on an object after putting it in a HashSet and the set can no longer find it, remove it, or stop you adding it twice. This article traces the bug through the real HashMap source: how a bucket is chosen, why every node caches its hash, what the equals/hashCode contracts actually promise, and how to prevent or recover from it.'
+tags:
+  [
+    'Java',
+    'HashSet',
+    'HashMap',
+    'Data Structures',
+    'Collections Framework',
+    'Java Internals',
+    'Backend Engineering',
+    'Software Engineering',
+    'Performance',
+  ]
+---
+
+import HashSetPlayground from './HashSetPlayground';
+
+Most Java developers use `HashSet` every day without thinking about how it finds things:
+
+```java
+Set<String> names = new HashSet<>();
+```
+
+You add elements, check whether they exist, remove them. It works, until one assignment to a field makes an object impossible to find even though it is still inside the set.
+
+## The bug
+
+```java title="Main.java" {31-32}
+import java.util.HashSet;
+import java.util.Set;
+
+class Employee {
+    int id;
+    String name;
+
+    Employee(int id, String name) {
+        this.id = id;
+        this.name = name;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Employee e)) return false;
+        return id == e.id;
+    }
+
+    @Override
+    public int hashCode() {
+        return Integer.hashCode(id);   // just returns id
+    }
+}
+
+public class Main {
+    public static void main(String[] args) {
+        Set<Employee> set = new HashSet<>();
+        Employee emp = new Employee(1, "Sid");
+
+        set.add(emp);
+        emp.id = 2;
+
+        System.out.println(set.contains(emp));
+    }
+}
+```
+
+```text
+false
+```
+
+`emp` was added one line earlier, the set has not been touched since, and `contains` is being asked about the very same reference. To see why the answer is `false`, you need to know three things about how `HashSet` stores an element: which structure actually holds it, how the slot is chosen, and what gets recorded alongside the element.
+
+## The mental model: a filing cabinet with labels written once
+
+Picture a cabinet with 16 drawers. When you file a document, you compute a number from its contents, pick a drawer from that number, and write the number on the folder tab. Later, to find a document, you compute the number again from what you're holding and open only the drawer it points to. You never search the whole cabinet; that's what makes lookup fast.
+
+Now edit the document after filing it, so the number computed from its contents changes. The next time you look for it, you compute a new number, open a different drawer, and find nothing. The document is still in the cabinet, in the old drawer, with the old number on its tab.
+
+That is the whole bug. The rest of this article shows that the analogy is not just an analogy: `HashMap` really does write the number on the tab, and that detail makes the problem worse than "wrong drawer".
+
+## HashSet is a HashMap
+
+`HashSet` has no hash table of its own. It wraps a `HashMap` and stores each element as a key, with a shared dummy object as the value. From the OpenJDK source:[^hashset-src]
+
+```java title="java/util/HashSet.java (abridged)"
+private transient HashMap<E,Object> map;
+
+// Dummy value to associate with an Object in the backing Map
+static final Object PRESENT = new Object();
+
+public boolean add(E e) {
+    return map.put(e, PRESENT) == null;
+}
+
+public boolean contains(Object o) {
+    return map.containsKey(o);
+}
+
+public boolean remove(Object o) {
+    return map.remove(o) == PRESENT;
+}
+```
+
+```mermaid caption="Every HashSet operation is a HashMap key operation. The value slot always holds the same PRESENT object."
+flowchart LR
+    A["set.add(e)"] --> P["map.put(e, PRESENT)"]
+    C["set.contains(o)"] --> K["map.containsKey(o)"]
+    R["set.remove(o)"] --> M["map.remove(o)"]
+    P & K & M --> HM[("HashMap table")]
+    class HM key
+```
+
+So everything below is about `HashMap` keys, and it applies equally to a `HashSet` element, a `HashMap` key and a `LinkedHashSet` element (which is backed by a `LinkedHashMap`).
+
+## How add() picks a bucket
+
+A `HashMap` is an array of _buckets_ (the source calls the array `table` and each slot a _bin_). `new HashSet<>()` creates a `HashMap` whose table is allocated lazily on the first insert, with 16 buckets and a load factor of 0.75, so it doubles to 32 once it holds more than 12 entries.[^hashmap-doc]
+
+Turning a key into a bucket index takes three steps.
+
+### Step 1: ask the key for its hash code
+
+```java
+int h = key.hashCode();   // emp.hashCode() == 1
+```
+
+### Step 2: spread the high bits into the low bits
+
+```java title="java/util/HashMap.java"
+static final int hash(Object key) {
+    int h;
+    return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
+}
+```
+
+The index in step 3 uses only the lowest few bits of the hash (4 bits for 16 buckets). Hash codes that differ only in their upper bits would all collide. XOR-ing the top 16 bits into the bottom 16 lets those upper bits influence the bucket. For small values like our ids, `h >>> 16` is 0 and the hash is unchanged.
+
+### Step 3: mask the hash down to an index
+
+```java
+int index = (n - 1) & hash;   // n = table length, always a power of two
+```
+
+When `n` is a power of two, `n - 1` is a run of 1-bits (`15` is `0b1111`), so `(n - 1) & hash` keeps the low bits. For a non-negative hash that's the same result as `hash % n`, but it costs a single AND and it also works for negative hash codes, where `%` would give a negative index. That's why the table length is always a power of two: request a capacity of 100 and you get 128.
+
+| `hashCode()` | after spreading | low 4 bits | bucket (n = 16) |
+| -----------: | --------------: | ---------: | --------------: |
+|          `1` |             `1` |     `0001` |               1 |
+|          `2` |             `2` |     `0010` |               2 |
+|         `17` |            `17` |     `0001` |               1 |
+|      `65536` |         `65537` |     `0001` |               1 |
+|     `131072` |        `131074` |     `0010` |               2 |
+
+Without spreading, `65536` and `131072` (both multiples of 2<sup>16</sup>) would both land in bucket 0. Notice also that `1` and `17` share a bucket: they differ only in bit 4, which a 16-bucket table ignores. That row comes back later.
+
+## What a bucket actually stores
+
+Each bucket holds a chain of nodes. Here is the node class:[^hashmap-src]
+
+```java title="java/util/HashMap.java" {2}
+static class Node<K,V> implements Map.Entry<K,V> {
+    final int hash;      // hash(key), computed once at insertion
+    final K key;
+    V value;
+    Node<K,V> next;
+    // ...
+}
+```
+
+`hash` is `final`. It's computed once, when the key goes in, and never recomputed. The map caches it for two reasons: comparing two `int`s is much cheaper than calling `equals()`, and when the table doubles in size, `resize()` needs every node's hash to decide where it goes, and recomputing `hashCode()` for every key on each resize would be wasteful.
+
+So after `set.add(emp)` the table looks like this:
+
+```mermaid caption="After set.add(emp): one node in bucket 1, holding a reference to emp and the cached hash 1."
+flowchart LR
+    subgraph table["table (n = 16)"]
+        direction TB
+        B0["[0]"]
+        B1["[1]"]
+        B2["[2]"]
+        Bd["…"]
+        B15["[15]"]
+    end
+    B1 --> N1["Node<br/>hash = 1<br/>key → emp"]
+    N1 -.-> O["Employee object<br/>id = 1"]
+    class N1 key
+```
+
+The node doesn't contain the employee. It holds a _reference_ to the same heap object `emp` points to. Assigning `emp.id = 2` changes that one object, which the node still points to, but nothing tells the node, so it keeps `hash = 1` in bucket 1.
+
+## How lookups decide "found"
+
+`contains`, `remove` and `put` all locate the key the same way. Abridged from OpenJDK:[^hashmap-src]
+
+```java title="java/util/HashMap.java (abridged)" {4,8-9}
+final Node<K,V> getNode(Object key) {
+    Node<K,V>[] tab; Node<K,V> first, e; int n, hash; K k;
+    if ((tab = table) != null && (n = tab.length) > 0 &&
+        (first = tab[(n - 1) & (hash = hash(key))]) != null) {
+        // (tree bins handled here, omitted)
+        e = first;
+        do {
+            if (e.hash == hash &&
+                ((k = e.key) == key || (key != null && key.equals(k))))
+                return e;
+        } while ((e = e.next) != null);
+    }
+    return null;
+}
+```
+
+Two tests must both pass for a node to count as a match:
+
+1. **The node's cached hash equals the hash of the key being looked up.** This is checked first and, when it fails, `equals()` is never called.
+2. **The keys are the same reference, or `equals()` says they're equal.**
+
+```mermaid caption="The lookup in getNode. Only one bucket is ever examined, and the cached hash is compared before equals()."
+flowchart TD
+    S(["lookup(key)"]) --> H["hash = spread(key.hashCode())"]
+    H --> I["bucket = (n - 1) #amp; hash"]
+    I --> E{"bucket empty?"}
+    E -- yes --> NF(["not found"])
+    E -- no --> C{"node.hash == hash?"}
+    C -- no --> NX{"next node?"}
+    C -- yes --> Q{"same reference or<br/>key.equals(node.key)?"}
+    Q -- yes --> F(["found"])
+    Q -- no --> NX
+    NX -- yes --> C
+    NX -- no --> NF
+    class C key
+```
+
+## Replaying the bug, step by step
+
+Now trace `set.contains(emp)` after `emp.id = 2`:
+
+1. `emp.hashCode()` returns `2`.
+2. Spreading leaves it at `2`.
+3. `15 & 2 = 2`, so the map opens bucket 2.
+4. Bucket 2 is empty. Return `false`.
+
+```mermaid caption="After emp.id = 2. The lookup goes to bucket 2; the node is still in bucket 1 with its stale cached hash."
+flowchart LR
+    Q["contains(emp)<br/>hash = 2"] --> B2
+    subgraph table["table (n = 16)"]
+        direction TB
+        B1["[1]"]
+        B2["[2] empty"]
+    end
+    B1 --> N1["Node<br/>hash = 1 (stale)<br/>key → emp"]
+    N1 -.-> O["Employee object<br/>id = 2"]
+    class N1 key
+```
+
+Bucket 1 is never visited, so the node, which still points to `emp`, is never seen. Other operations don't go through hashing at all, and they show the element is still there:
+
+```java
+System.out.println(set.size());          // 1: size is a counter
+for (Employee e : set)
+    System.out.println(e.id);            // 2: iteration walks every bucket
+System.out.println(set.remove(emp));     // false: remove hashes, so it looks in bucket 2 too
+```
+
+The set reports one element, iteration shows it with `id = 2`, but `contains` and `remove`, the two operations that go through the hash, can't reach it.
+
+## Try it
+
+Step through each scenario one line at a time, or switch to free play and create your own objects. Every node shows the hash it cached at insertion and the current `id` of the object it points to. A node turns red once those disagree. The variables table shows where each object's current hash _looks_ and where it actually _lives_.
+
+<HashSetPlayground />
+
+## It's not just the wrong bucket
+
+A common explanation stops at "the object is in the wrong bucket." That's incomplete, and the second scenario above shows why. Change the id from 1 to **17** instead of 2:
+
+```java
+Employee emp = new Employee(1, "Sid");
+set.add(emp);
+emp.id = 17;                       // 17 & 15 == 1: same bucket as before
+System.out.println(set.contains(emp));
+```
+
+```text
+false
+```
+
+The lookup goes to the correct bucket this time. It finds the node, compares the cached `hash = 1` with the new hash `17`, sees they differ, and skips it without calling `equals()`, even though the node points to the exact object being searched for.
+
+A different object with the _old_ value doesn't help either. `set.contains(new Employee(1, "x"))` hashes to bucket 1, the cached hash matches, but `equals()` now compares id `1` with id `17` and fails. No key, old or new, can match that node any more.
+
+Resizing doesn't repair it. When the table doubles, `resize()` moves each node using the cached `e.hash` (it splits a bucket by testing `e.hash & oldCap`), not by calling `hashCode()` again.[^hashmap-src] The stale hash moves along with the node.
+
+> [!IMPORTANT]
+> A mutated key is lost in two ways: lookups go to the bucket chosen by the new hash, and even in the right bucket the cached hash no longer matches. Neither growing the table nor waiting will fix it.
+
+## Everything that goes wrong
+
+These results come from running the scenarios on JDK 18 with the `Employee` class from the start of the article:
+
+```java title="Experiments.java"
+Set<Employee> set = new HashSet<>();
+Employee emp = new Employee(1, "Sid");
+set.add(emp);
+emp.id = 2;
+
+set.contains(emp);                   // false
+set.size();                          // 1
+set.contains(new Employee(1, "x"));  // false: right bucket, equals() fails
+set.contains(new Employee(2, "x"));  // false: bucket 2 is empty
+set.remove(emp);                     // false
+set.add(emp);                        // true: it gets added again
+set.size();                          // 2, the same object twice
+```
+
+| Symptom                               | Why                                                                                                                                          |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contains` returns `false`            | The new hash leads to a different bucket, or the cached hash doesn't match.                                                                  |
+| `remove` returns `false`              | `remove` finds its target the same way `contains` does.                                                                                      |
+| The same object appears twice         | `add` can't find the original node, so it inserts a second one in the new bucket. The set now breaks its own "no duplicates" rule.           |
+| Memory leak                           | An entry that `remove` can't reach stays reachable from the set until the set itself is collected. In a long-lived cache this grows forever. |
+| A `HashMap` value becomes unreachable | `map.get(key)` fails the same way, so the value is only reachable by iterating the entries.                                                  |
+
+These bugs are hard to diagnose because nothing throws. The debugger shows the object inside the set, `size()` agrees, and the code calling `contains` looks correct.
+
+## What the contracts actually say
+
+It's tempting to call this a violation of the `equals()`/`hashCode()` contract. It isn't. The `Object.hashCode()` contract allows the hash to change:[^object-hashcode]
+
+> Whenever it is invoked on the same object more than once during an execution of a Java application, the `hashCode` method must consistently return the same integer, **provided no information used in `equals` comparisons on the object is modified**.
+
+Our `Employee` follows it exactly: `id` is used in `equals`, `id` changed, so the hash code is allowed to change. The rule being broken belongs to the collections. The `Set` interface documentation says:[^set-doc]
+
+> Great care must be exercised if mutable objects are used as set elements. The behavior of a set is not specified if the value of an object is changed in a manner that affects equals comparisons while the object is an element in the set.
+
+`Map` says the same about keys.[^map-doc] "Not specified" is the important part: once you mutate a key, the JDK makes no promise at all about what the collection does. Every result in the table above is an implementation detail of the current `HashMap`, not something to rely on.
+
+So the rule to follow is:
+
+> [!WARNING]
+> While an object is a key in a hash-based map or an element of a hash-based set, don't change any field that `equals()` or `hashCode()` reads.
+
+Fields outside `equals()`/`hashCode()` are safe to change. Renaming the employee (`emp.name = "Renamed"`) leaves `contains(emp)` returning `true`, because `name` isn't part of the hash.
+
+## Collisions: chains and tree bins
+
+Different keys that land in the same bucket are a _collision_. That's normal: with 16 buckets, ids 1, 17 and 33 always share bucket 1. The bucket holds a linked chain of nodes, and a lookup walks it, comparing cached hashes first and calling `equals()` only on hash matches.
+
+A long chain makes lookups linear in its length. Since Java 8 ([JEP 180](https://openjdk.org/jeps/180)), `HashMap` converts a chain into a red-black tree (a _tree bin_) once it grows past `TREEIFY_THRESHOLD = 8` nodes, but only if the table has at least `MIN_TREEIFY_CAPACITY = 64` buckets. In a smaller table it resizes instead, since a crowded bucket in a small table usually means the table is too small rather than that the hash codes are poor. A tree bin shrinks back to a chain when it falls to `UNTREEIFY_THRESHOLD = 6` nodes.[^hashmap-src]
+
+A tree bin orders nodes by hash first. For nodes with equal hashes, it orders them by `compareTo()` if the keys are mutually `Comparable`, and otherwise falls back to a tie-breaking order that lookups can't use, so they may have to search both subtrees.[^hashmap-src] That's why a key type with many colliding hash codes benefits from implementing `Comparable`: worst-case lookups drop from _O(n)_ to _O(log n)_. If the keys aren't comparable and the hashes are identical, a tree bin is little better than a chain.
+
+Tree bins don't change anything about mutation. Nodes still cache their hash, and the tree is ordered by that cached hash, so a mutated key is just as lost.
+
+## How to prevent it
+
+### Make the identifying fields immutable
+
+If the fields that `equals()` and `hashCode()` read can't change, the hash can't change. For a plain class, make those fields `final`:
+
+```java title="Employee.java" {2}
+final class Employee {
+    private final int id;     // identity: never changes
+    private String name;      // safe to change, not in equals/hashCode
+
+    Employee(int id, String name) { this.id = id; this.name = name; }
+
+    @Override public boolean equals(Object o) {
+        return o instanceof Employee e && id == e.id;
+    }
+    @Override public int hashCode() { return Integer.hashCode(id); }
+}
+```
+
+For data carriers, a **record** does this for you. Records were previewed in Java 14 and 15 and became standard in Java 16 ([JEP 395](https://openjdk.org/jeps/395)). Every component becomes a `private final` field, and the compiler generates `equals()` and `hashCode()` from all components.[^record-doc]
+
+```java
+public record EmployeeKey(int id, String department) {}
+```
+
+> [!NOTE]
+> Records are _shallowly_ immutable. A component's reference can't be reassigned, but the object it points to can still change. A `record Team(String name, List<String> members)` built from an `ArrayList` breaks exactly like `Employee`: adding a member changes `members.hashCode()`, so `teams.contains(team)` returns `false`. (Verified on JDK 18.) Copy mutable components defensively in the compact constructor, for example `members = List.copyOf(members);`.
+
+The `Record` Javadoc also states that the exact algorithm of the generated `hashCode()` is unspecified and may change between releases,[^record-doc] so don't persist record hash codes or depend on their values.
+
+### Key mutable objects by something that doesn't change
+
+Sometimes the object has to be mutable: an entity, a session, a model you update in place. Then don't make the object itself the key. Key it by a stable identifier:
+
+```java
+Map<Integer, Employee> byId = new HashMap<>();
+byId.put(emp.id, emp);   // the id is assigned once and never reassigned
+// change emp.name and other fields freely; the Integer key is independent of them
+```
+
+### Use identity when that's what you mean
+
+If two distinct objects should never count as "the same", don't override `equals()` and `hashCode()` at all. The inherited `Object.hashCode()` is based on identity and stays the same for the object's lifetime, so mutating fields has no effect on the set. `IdentityHashMap` gives you the same behaviour explicitly, even for classes that do override `equals()`.
+
+### Remove, mutate, re-add
+
+If a key field really must change while the object is in the set, take it out first:
+
+```java
+set.remove(emp);   // removed under the old hash
+emp.id = 2;
+set.add(emp);      // re-inserted under the new hash
+```
+
+This is correct but fragile: every code path that writes the field has to remember to do it, and it's not atomic, so other threads can observe the gap.
+
+## Recovering a set that's already broken
+
+If you find a set in this state, two tools still work, because neither looks anything up by hash.
+
+**Remove through the iterator.** Iteration walks the table bucket by bucket, and `Iterator.remove()` unlinks the current node using that node's own cached hash.[^hashmap-src] `Collection.removeIf` is built on the iterator, so this finds and removes the lost element:
+
+```java
+set.removeIf(e -> e == emp);   // true
+```
+
+**Rebuild the set.** Copying into a new set calls `add()` on every element, computing each hash fresh, so every element ends up in the right bucket under its current hash. Duplicates introduced by the bug collapse back to one, since the copies are equal:
+
+```java
+set = new HashSet<>(set);
+```
+
+Both are repairs, not designs. If you're doing either in production code, fix the key type.
+
+## The same bug elsewhere
+
+- **`HashMap`, `LinkedHashMap`, `LinkedHashSet`:** same table, same cached hash.
+- **`ConcurrentHashMap`:** its nodes also store a `final int hash`, and lookups compare it first. Thread safety protects the map's own structure, not your key objects' fields.
+- **`Hashtable`:** picks the bucket with `(hash & 0x7FFFFFFF) % tab.length` instead of a mask, but it also caches each entry's hash and compares it before `equals()`.
+- **`TreeSet` / `TreeMap`:** no hashing, but the same problem with ordering. Mutate a field that `compareTo()` (or the `Comparator`) reads, and the element sits in the wrong position in the tree, where searches won't find it.
+
+A real-world version that catches many teams: **JPA entities whose `equals()`/`hashCode()` use a database-generated id.** The id is `null` until the entity is persisted, so an entity added to a `Set` before `persist()` is filed under the hash of a `null` id, and once the id is assigned it can't be found or removed. The Hibernate User Guide has a section on exactly this, and recommends basing `equals()` and `hashCode()` on a natural key that never changes.[^hibernate] Another common approach is id-based `equals()` with a `hashCode()` that returns a constant for the class, which trades bucket spread for a hash that can never go stale.
+
+## Check your understanding
+
+<details>
+<summary>1. `Employee.hashCode()` uses only `id`. After adding `emp` to a set, you change `emp.name`. Does `set.contains(emp)` still return `true`?</summary>
+
+Yes. `name` isn't used by `equals()` or `hashCode()`, so the hash is unchanged, the lookup goes to the same bucket, and the cached hash matches.
+
+</details>
+
+<details>
+<summary>2. With 16 buckets, `emp.id` changes from 1 to 17. Both map to bucket 1. Why does `contains(emp)` still fail?</summary>
+
+The node cached `hash = 1` when it was inserted. The lookup computes `17`, and `getNode` requires `node.hash == hash` before it even calls `equals()`. Same bucket, mismatched cached hash, no match.
+
+</details>
+
+<details>
+<summary>3. The set has 13 entries and grows from 16 to 32 buckets. Does the resize move the mutated element to where it belongs?</summary>
+
+No. `resize()` decides where each node goes using the cached `hash` field, not by calling `hashCode()` again, so the stale hash moves with the node. Only re-adding the element (or copying into a new set) rehashes it.
+
+</details>
+
+<details>
+<summary>4. How do you remove an element you can no longer `remove()`?</summary>
+
+Through the iterator: `set.removeIf(e -> e == target)`, or an explicit `Iterator` with `it.remove()`. The iterator unlinks the node using the node's own cached hash, so it doesn't depend on the key's current hash code.
+
+</details>
+
+## The short version
+
+A `HashMap`, and so a `HashSet`, files each key under the hash it had at the moment it was inserted, and writes that hash on the node. Lookups go only to the bucket chosen by the key's _current_ hash and then require the cached hash to match. Change a field that feeds `hashCode()` and both checks fail: the object stays in the collection, counted by `size()` and visible to iteration, but no lookup can find it, `remove()` can't take it out, and `add()` will insert it a second time.
+
+Keep the fields that define equality immutable, key mutable objects by a stable id, and when you inherit a broken set, iterate or rebuild rather than look up.
+
+## References
+
+- OpenJDK, [`HashMap.java`](https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/HashMap.java) and [`HashSet.java`](https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/HashSet.java) source. The implementation notes at the top of `HashMap.java` explain tree bins.
+- [JEP 180: Handle Frequent HashMap Collisions with Balanced Trees](https://openjdk.org/jeps/180)
+- [JEP 395: Records](https://openjdk.org/jeps/395)
+- Java SE 21 API: [`Object.hashCode()`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Object.html#hashCode%28%29), [`Set`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Set.html), [`Map`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Map.html), [`HashMap`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html), [`Record`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Record.html)
+- Joshua Bloch, _Effective Java_, 3rd ed. (2018): Item 10 (obey the general contract when overriding `equals`), Item 11 (always override `hashCode` when you override `equals`), Item 17 (minimize mutability).
+
+[^hashset-src]: OpenJDK, [`java/util/HashSet.java`](https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/HashSet.java).
+
+[^hashmap-src]: OpenJDK, [`java/util/HashMap.java`](https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/HashMap.java): `Node`, `hash()`, `getNode()`, `resize()`, `treeifyBin()`, `HashIterator.remove()`, and the tree-bin implementation notes.
+
+[^hashmap-doc]: [`HashMap` API documentation](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html): default initial capacity 16, default load factor 0.75.
+
+[^object-hashcode]: [`Object.hashCode()` API documentation](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Object.html#hashCode%28%29).
+
+[^set-doc]: [`Set` API documentation](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Set.html), class description.
+
+[^map-doc]: [`Map` API documentation](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Map.html), class description.
+
+[^record-doc]: [`Record` API documentation](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Record.html), `equals` and `hashCode`; [JEP 395](https://openjdk.org/jeps/395).
+
+[^hibernate]: [Hibernate ORM User Guide](https://docs.jboss.org/hibernate/orm/current/userguide/html_single/Hibernate_User_Guide.html), "Implementing `equals()` and `hashCode()`".

@@ -1,0 +1,1003 @@
+---
+title: 'Logistic Regression from First Principles: Log-Odds, Likelihood and the Decision Threshold'
+date: '2026-11-10'
+summary: 'Logistic regression is linear regression rebuilt for yes-or-no questions: a weighted sum of features pushed through a sigmoid, trained by maximum likelihood. This article derives it from an eight-point example, shows why the loss is log loss and why its gradient is so simple, trains it with gradient descent and Newton’s method you can steer, breaks it on separable data, and then uses it to diagnose breast tumours, where the interesting decisions are about thresholds and probabilities rather than weights.'
+tags:
+  [
+    'Machine Learning',
+    'Logistic Regression',
+    'Classification',
+    'Statistics',
+    'Optimization',
+    'Python',
+    'scikit-learn',
+    'NumPy',
+  ]
+---
+
+import 'katex/dist/katex.min.css';
+import SigmoidFitter from './SigmoidFitter';
+import ThresholdExplorer from './ThresholdExplorer';
+import lineLight from './line-vs-sigmoid.light.svg';
+import lineDark from './line-vs-sigmoid.dark.svg';
+import lossLight from './loss-gradient.light.svg';
+import lossDark from './loss-gradient.dark.svg';
+import boundaryLight from './decision-boundaries.light.svg';
+import boundaryDark from './decision-boundaries.dark.svg';
+
+The courier from the [linear regression article](/blog/linear_regression) has a new question. Predicting _how long_ a delivery takes was useful, but the customer only cares about one thing: will it be late? Here are eight deliveries, with 1 meaning late and 0 meaning on time.
+
+| Distance (km) | Late? |
+| ------------: | ----: |
+|             1 |     0 |
+|             2 |     0 |
+|             3 |     0 |
+|             4 |     1 |
+|             5 |     0 |
+|             6 |     1 |
+|             7 |     1 |
+|             8 |     1 |
+
+A new order comes in for 3.5 km. Will it be late?
+
+"Yes" or "no" is the wrong kind of answer. The table shows that long trips are usually late and short ones usually aren't, but the 4 km and 5 km rows disagree with that trend. What we actually want is a **probability**: "this one has about a 22% chance of being late". A probability can be acted on in different ways: warn the customer above 50%, send a faster rider above 80%, do nothing below 10%. It also says how sure the model is, which a bare label never does.
+
+Logistic regression produces those probabilities. It is the standard first model for binary classification, it is still a strong production model in medicine, credit scoring and advertising, and it is exactly what the output layer of a neural-network classifier computes. Like linear regression, it is worth understanding completely, because each part of it shows up again in bigger models: a linear score, a link function that turns scores into probabilities, a loss that falls out of maximum likelihood, a gradient with a remarkably clean form, and the gap between producing good probabilities and making good decisions.
+
+The eight deliveries carry us through the theory, where every number can be checked by hand. The second half moves to a real diagnostic dataset, where the questions become which threshold to use, whether the probabilities can be trusted, and how to read the coefficients.
+
+**What you need:** the [linear regression article](/blog/linear_regression), or equivalent comfort with weighted sums, loss functions, gradients and gradient descent. Logarithms and exponentials. A little probability: what $P(y = 1 \mid x)$ means. Every number in this article comes from running the code shown; synthetic data is labelled as such.
+
+## Why not fit a line to 0s and 1s?
+
+The obvious first attempt is to reuse what we know. Treat "late" as a number, 0 or 1, fit least squares, and read the prediction as a probability. For the eight deliveries the least-squares line is
+
+$$
+\hat y = -0.25 + 0.167\,x
+$$
+
+and it crosses 0.5 at $x = 4.5$ km. As a classifier ("late if $\hat y \ge 0.5$") that is not bad. As a probability model it is broken in two ways, shown in the figure below.
+
+<Figure
+  light={lineLight}
+  dark={lineDark}
+  alt="Two panels. Left: the eight deliveries at heights 0 and 1, a dashed straight line running from below 0 to above 1, and a red S-shaped curve that stays between 0 and 1; both cross 0.5 at 4.5 km. Right: the same data plus one late delivery at 25 km; the dashed line has flattened and now crosses 0.5 at 5.34 km, while the S-curve is unchanged and still crosses 0.5 at 4.5 km."
+  caption="Least squares versus logistic regression on the toy deliveries. Shaded bands are values no probability can take. Right: one extra delivery, far out and unambiguously late, drags the line's 0.5 crossing from 4.50 to 5.34 km; the logistic curve's crossing does not move."
+/>
+
+**It produces impossible probabilities.** A line is unbounded. It predicts $-0.25$ at 0 km and $1.42$ at 10 km. Clipping to $[0, 1]$ hides the symptom, but the model is still wrong about shape: probabilities should flatten out near 0 and 1, not keep climbing.
+
+**Easy examples distort the fit.** Add one more delivery: 25 km, and late. That point says nothing new. Anyone would have predicted it. But least squares sees a residual: the line predicts $1.26$ there, not 1, and the squared error pulls the line flatter to reduce it. The 0.5 crossing slides from 4.50 to 5.34 km, so deliveries around 5 km change class because of a trip at 25 km. A good classifier should take its decision boundary from the examples near it, where the labels are mixed, and stop caring about points it already gets right with confidence.
+
+Both problems have the same root. Least squares treats the label as a quantity with Gaussian noise around a straight line. A 0/1 label is not that. It is the outcome of a coin flip whose bias depends on $x$. We need a model of that bias that is always between 0 and 1, and a loss that matches coin flips rather than Gaussian noise.
+
+## From a score to a probability
+
+We want to keep the best part of linear regression, a weighted sum of features, because it is cheap, interpretable and easy to optimise. Call it the **score**:
+
+$$
+z = w x + b
+$$
+
+The score can be any real number. A probability cannot. So we need a function that maps $(-\infty, \infty)$ onto $(0, 1)$, increasing, with large positive scores meaning "almost certainly late" and large negative scores "almost certainly on time". There are many such functions. The one logistic regression uses comes from asking what a linear score should _mean_.
+
+### Odds and log-odds
+
+Gamblers have long expressed probabilities as **odds**: the probability something happens divided by the probability it doesn't.
+
+$$
+\text{odds} = \frac{p}{1 - p}
+$$
+
+A probability of 0.8 is odds of $0.8 / 0.2 = 4$, "4 to 1 on". A probability of 0.5 is odds of 1. Odds run from 0 to $\infty$, which is half of what we need. Taking the logarithm finishes the job. The **log-odds**, also called the **logit**,
+
+$$
+\operatorname{logit}(p) = \log \frac{p}{1 - p}
+$$
+
+runs over the whole real line: $p = 0.5$ gives 0, probabilities above one half give positive values, below one half negative, and it is symmetric, since $\operatorname{logit}(1 - p) = -\operatorname{logit}(p)$.
+
+Logistic regression's central modelling assumption is that **the log-odds are linear in the features**:
+
+$$
+\log \frac{p}{1 - p} = w x + b
+$$
+
+That one line is the whole model. Everything else is algebra.
+
+### The sigmoid is the inverse of the logit
+
+To get $p$ out, solve for it. Exponentiate both sides, $p / (1 - p) = e^{z}$, multiply out, $p = e^{z} - p\,e^{z}$, and collect the $p$ terms:
+
+$$
+p = \frac{e^{z}}{1 + e^{z}} = \frac{1}{1 + e^{-z}} \equiv \sigma(z)
+$$
+
+This is the **logistic function**, usually called the **sigmoid** and written $\sigma$. Its S shape is in the figure above. The properties we will use:
+
+- $\sigma(0) = 0.5$; $\sigma(z) \to 1$ as $z \to \infty$ and $\sigma(z) \to 0$ as $z \to -\infty$. The output is always strictly between 0 and 1.
+- **Symmetry:** $\sigma(-z) = 1 - \sigma(z)$. The probability of "on time" is the sigmoid of the negated score.
+- **Derivative:** $\sigma'(z) = \sigma(z)\,(1 - \sigma(z))$. Differentiate $(1 + e^{-z})^{-1}$ to get $e^{-z} / (1 + e^{-z})^2$, then split it as $\frac{1}{1 + e^{-z}} \cdot \frac{e^{-z}}{1 + e^{-z}}$. The derivative is largest, $1/4$, at $z = 0$, and vanishes in the tails. Both facts matter shortly.
+
+The logistic function is old. Pierre-François Verhulst introduced it in the 1830s and 1840s as a model of population growth that levels off. Joseph Berkson coined "logit" for its inverse in a [1944 paper on bio-assay](https://doi.org/10.1080/01621459.1944.10500699), and David Cox's [1958 paper on binary sequences](https://doi.org/10.1111/j.2517-6161.1958.tb00292.x) set out regression on the log-odds in the form used today.
+
+> [!NOTE]
+> There is a second way to arrive at the same model. Suppose each delivery has a hidden "lateness" $z + \varepsilon$, where $\varepsilon$ is random noise, and the delivery is late when this is positive. Then $P(\text{late}) = P(\varepsilon \gt -z)$. If $\varepsilon$ follows the standard logistic distribution, that probability is exactly $\sigma(z)$. If $\varepsilon$ is Gaussian, it is the Gaussian CDF $\Phi(z)$, and the model is called **probit** regression. The two curves are nearly indistinguishable after rescaling; logistic regression is preferred mainly because the log-odds reading and the gradient below are so clean.
+
+## The model, and what its weights mean
+
+With $p$ features, the score becomes a dot product, exactly as in linear regression:
+
+$$
+P(y = 1 \mid \mathbf x) = \sigma(\mathbf w^\top \mathbf x + b) = \frac{1}{1 + e^{-(\mathbf w^\top \mathbf x + b)}}
+$$
+
+- $\mathbf x \in \mathbb R^p$ is one example's feature vector.
+- $\mathbf w \in \mathbb R^p$ are the **weights** and $b$ the **bias** (intercept).
+- $y \in \{0, 1\}$ is the label. We write $p_i = \sigma(\mathbf w^\top \mathbf x_i + b)$ for the model's probability that example $i$ is positive.
+
+```mermaid caption="Prediction is a dot product, a sigmoid and an optional threshold. Training only ever sees the probability."
+flowchart LR
+    X["Features x"] --> Z["Score z = wᵀx + b<br/>(log-odds)"]
+    Z --> S["p = σ(z)<br/>P(y = 1 ∣ x)"]
+    S --> T{"p ≥ t ?"}
+    T -->|yes| P1["Predict 1"]
+    T -->|no| P0["Predict 0"]
+    S --> L["Log loss against y<br/>(training only)"]
+    class S key
+```
+
+Three things to read off this model.
+
+**The weights act on log-odds, not on probability.** Increasing $x_j$ by one unit, holding the other features fixed, adds $w_j$ to the log-odds, which **multiplies the odds by $e^{w_j}$**. That multiplier is the **odds ratio**. It is constant, whatever the starting point. The effect on probability is not constant: an extra kilometre matters a lot when the probability is near 0.5 and very little when it is already near 0 or 1, because the sigmoid is steep in the middle and flat at the ends.
+
+**The decision boundary is a hyperplane.** If we predict "late" when $p \ge 0.5$, that is the same as $z \ge 0$, since $\sigma$ crosses 0.5 at zero. The boundary is the set of points where $\mathbf w^\top \mathbf x + b = 0$: a point on a line, a line in a plane, a hyperplane in general. $\mathbf w$ is perpendicular to it, and the score of a point divided by $\lVert \mathbf w \rVert$ is its signed distance from the boundary. So the size of $\mathbf w$ sets how quickly probability changes as you move away from the boundary: a long $\mathbf w$ means a steep sigmoid, a short one a gentle slope. That will matter when we look at separable data.
+
+**The threshold is a separate decision.** The model's job is the probability. Turning probabilities into actions with a threshold $t$ is a choice that depends on what errors cost. Using 0.5 is a default, not part of the model, and the [evaluation section](#choosing-a-threshold) shows how far from 0.5 a sensible threshold can be.
+
+### The fitted model for the deliveries
+
+We haven't seen how to fit it yet; that's the next two sections. Jumping ahead, the maximum-likelihood fit for the eight deliveries is
+
+$$
+\log \frac{p}{1-p} = -5.770 + 1.282\,x
+$$
+
+- **Boundary:** $z = 0$ at $x = 5.770 / 1.282 = 4.50$ km. The data are symmetric about 4.5 km if you also swap late and on-time, so the boundary lands exactly there.
+- **Odds ratio:** $e^{1.282} = 3.60$. Each extra kilometre multiplies the odds of being late by 3.6. At 4 km, $p = 0.345$, odds 0.53; at 5 km, $p = 0.655$, odds 1.90. The ratio is 3.6.
+- **The 3.5 km order:** $z = -5.770 + 1.282 \times 3.5 = -1.282$, so $p = \sigma(-1.282) = 0.217$. About a 22% chance of being late.
+
+The fitted probabilities for the eight training deliveries are 0.011, 0.039, 0.127, 0.345, 0.655, 0.873, 0.961 and 0.989. The model is confident at the ends and honest in the middle, where the data disagree.
+
+**Check your understanding**
+
+<details>
+<summary>The bias b is −5.77. What does it mean on its own?</summary>
+
+It is the log-odds at $x = 0$: $\sigma(-5.77) \approx 0.003$, so a 0 km delivery would be late 0.3% of the time. That is an extrapolation, since no delivery was shorter than 1 km, and it is mainly there to place the boundary. As in linear regression, the intercept is easier to interpret if you centre the features first: then it is the log-odds for an average example.
+
+</details>
+
+<details>
+<summary>If you double w and b, what happens to the decision boundary and the probabilities?</summary>
+
+The boundary $-b/w$ is unchanged, so every 0.5-threshold prediction is the same. The probabilities are not: every score doubles, so the sigmoid gets steeper and every probability moves toward 0 or 1. Accuracy cannot tell these two models apart. A probability-based loss can, which is one reason accuracy is a poor training objective.
+
+</details>
+
+## Choosing the loss: maximum likelihood
+
+We need a single number that says how well a choice of $(\mathbf w, b)$ fits the training labels. The linear regression article showed that least squares is what maximum likelihood gives you when the noise is Gaussian. Here the noise is a coin flip, so apply the same principle to a coin flip.
+
+### The Bernoulli likelihood
+
+Under the model, label $y_i$ is a Bernoulli outcome: 1 with probability $p_i$, 0 with probability $1 - p_i$. Both cases fit in one expression:
+
+$$
+P(y_i \mid \mathbf x_i) = p_i^{\,y_i}\,(1 - p_i)^{1 - y_i}
+$$
+
+When $y_i = 1$ the second factor is 1 and this is $p_i$; when $y_i = 0$ the first factor is 1 and it is $1 - p_i$. Assuming the examples are independent, the **likelihood** of the whole training set is the product over examples, and **maximum likelihood estimation** picks the parameters that make it as large as possible: the parameters under which the labels we actually saw are most probable.
+
+Products of many probabilities underflow to zero in floating point and are awkward to differentiate. Take the logarithm, which turns the product into a sum and doesn't move the maximum. Then negate, so that we minimise rather than maximise, and divide by $n$:
+
+$$
+J(\mathbf w, b) = -\frac{1}{n}\sum_{i=1}^{n} \Big[\, y_i \log p_i + (1 - y_i)\log(1 - p_i) \Big]
+$$
+
+This is the **log loss**, also called **binary cross-entropy** or the negative log-likelihood. For each example only one of the two terms is active: the loss is $-\log p_i$ for a positive example and $-\log(1 - p_i)$ for a negative one. In words, **the loss of an example is minus the log of the probability the model gave to what actually happened**.
+
+| Probability given to the true label | Loss $-\log(\cdot)$ |
+| ----------------------------------: | ------------------: |
+|                                0.99 |               0.010 |
+|                                 0.9 |               0.105 |
+|                                 0.5 |               0.693 |
+|                                 0.1 |               2.303 |
+|                                0.01 |               4.605 |
+
+Being confidently right costs almost nothing. Saying 50/50 costs $\log 2 = 0.693$, which is what you pay for knowing nothing. Being confidently wrong is expensive, and the cost goes to infinity as the probability on the true label goes to zero. That last property is what makes the model honest: it never pays to claim certainty you don't have.
+
+For the toy data, the model that says 0.5 for everything scores 0.693. The fitted model above scores 0.313.
+
+> [!NOTE]
+> The name _cross-entropy_ comes from information theory. $-\log_2 p$ is the number of bits needed to encode an outcome that the model gave probability $p$. Log loss is the average code length when the labels are encoded with the model's probabilities, and minimising it is the same as minimising the KL divergence from the observed labels to the model's predictions. Chapter 5 of the [_Deep Learning_ book](https://www.deeplearningbook.org/contents/ml.html) develops this connection.
+
+### Why not squared error?
+
+Nothing stops us minimising $\frac{1}{n}\sum_i (y_i - p_i)^2$ instead. It is bounded, it is intuitive, and it is used as an evaluation metric (the Brier score, later). As a training loss for a sigmoid it has two real problems.
+
+**It goes quiet exactly when the model is most wrong.** By the chain rule, the gradient of the squared error with respect to the score is $2(p - y)\,\sigma'(z) = 2(p - y)\,p(1 - p)$. Take a positive example that the model scores at $z = -6$: $p = 0.0025$, a confident mistake. The factor $p(1 - p)$ is tiny, so the gradient is about $0.005$. The worst example in the dataset barely moves the weights. The log-loss gradient for the same example, derived next, is $p - y = -0.9975$: almost the largest push possible.
+
+**It is not convex in the weights.** Composing squared error with a sigmoid produces a loss surface with flat plateaus, so gradient descent can stall. Log loss composed with a sigmoid is convex, as we prove below. There is one minimum and every downhill path leads to it.
+
+<Figure
+  light={lossLight}
+  dark={lossDark}
+  alt="Two panels for a positive example. Left: loss against predicted probability; log loss rises steeply to infinity as probability approaches 0, while squared error rises only to 1. Right: the size of the gradient with respect to the score; for log loss it approaches 1 for very negative scores, while for squared error it peaks near 0.3 and falls to almost 0 for very negative scores, the confidently wrong region."
+  caption="Left: log loss punishes confident mistakes without limit; squared error caps the penalty at 1. Right: what that does to learning. With squared error, the gradient for a confidently wrong example (shaded) almost vanishes; with log loss it is close to its maximum."
+/>
+
+## The gradient, derived
+
+To train the model we need the gradient of $J$ with respect to $\mathbf w$ and $b$. It turns out to be one of the cleanest results in machine learning.
+
+Work with one example and its loss $\ell = -[\,y \log p + (1 - y)\log(1 - p)\,]$, where $p = \sigma(z)$ and $z = \mathbf w^\top \mathbf x + b$. The chain rule splits the derivative into three links:
+
+$$
+\frac{\partial \ell}{\partial w_j} = \frac{\partial \ell}{\partial p} \cdot \frac{\partial p}{\partial z} \cdot \frac{\partial z}{\partial w_j}
+$$
+
+**Link 1, loss to probability:**
+
+$$
+\frac{\partial \ell}{\partial p} = -\frac{y}{p} + \frac{1 - y}{1 - p} = \frac{p - y}{p(1 - p)}
+$$
+
+(put both fractions over the common denominator $p(1 - p)$: the numerator is $-y(1 - p) + (1 - y)p = p - y$).
+
+**Link 2, probability to score:** the sigmoid derivative, $\dfrac{\partial p}{\partial z} = p(1 - p)$.
+
+Multiply them. The $p(1 - p)$ cancels:
+
+$$
+\boxed{\;\frac{\partial \ell}{\partial z} = p - y\;}
+$$
+
+The derivative of the loss with respect to the score is simply **prediction minus label**. This cancellation is not luck. The log in the loss exactly undoes the exponential in the sigmoid, and it is the reason the right panel of the figure above shows a log-loss gradient that never vanishes for a wrong prediction. (Statisticians call the logit the _canonical link_ for the Bernoulli distribution, and this cancellation is what makes it canonical.)
+
+**Link 3, score to parameters:** $\partial z / \partial w_j = x_j$ and $\partial z / \partial b = 1$.
+
+Averaging over the training set:
+
+$$
+\frac{\partial J}{\partial w_j} = \frac{1}{n}\sum_{i=1}^{n} (p_i - y_i)\,x_{ij}, \qquad
+\frac{\partial J}{\partial b} = \frac{1}{n}\sum_{i=1}^{n} (p_i - y_i)
+$$
+
+In matrix form, with the design matrix $X$ (one row per example, a leading column of ones for the bias) and $\boldsymbol\theta = (b, \mathbf w)$:
+
+$$
+\nabla J(\boldsymbol\theta) = \frac{1}{n} X^\top (\mathbf p - \mathbf y)
+$$
+
+Compare this with the linear regression gradient, $\frac{2}{n}X^\top(X\boldsymbol\theta - \mathbf y)$. Apart from the constant, **it is the same formula**: correlate the prediction errors with each feature. The only difference is that the prediction is now $\sigma(X\boldsymbol\theta)$ instead of $X\boldsymbol\theta$. The same pattern holds for every generalised linear model with its canonical link, and for the softmax output layer of a neural network, as the [multiclass section](#more-than-two-classes-softmax) shows.
+
+It also explains the 25 km delivery. Its fitted probability of being late is $1 - 4 \times 10^{-12}$, so its $p - y$ is effectively zero, and it contributes nothing to the gradient. Unlike least squares, logistic regression stops listening to examples it already gets right.
+
+### Worked example: the first gradient
+
+Start at $w = b = 0$. Every score is 0, so every $p_i = 0.5$, and $p_i - y_i$ is $+0.5$ for the on-time deliveries and $-0.5$ for the late ones:
+
+| $x_i$ | $y_i$ | $p_i - y_i$ | $(p_i - y_i)\,x_i$ |
+| ----: | ----: | ----------: | -----------------: |
+|     1 |     0 |        +0.5 |               +0.5 |
+|     2 |     0 |        +0.5 |               +1.0 |
+|     3 |     0 |        +0.5 |               +1.5 |
+|     4 |     1 |        −0.5 |               −2.0 |
+|     5 |     0 |        +0.5 |               +2.5 |
+|     6 |     1 |        −0.5 |               −3.0 |
+|     7 |     1 |        −0.5 |               −3.5 |
+|     8 |     1 |        −0.5 |               −4.0 |
+|       |       |     **0.0** |           **−7.0** |
+
+So $\partial J/\partial b = 0 / 8 = 0$ and $\partial J/\partial w = -7 / 8 = -0.875$. There are as many late deliveries as on-time ones, so the overall rate is already right and the bias has nothing to fix. But the late deliveries are the long ones, so the errors correlate negatively with distance, and the gradient says: increase $w$. The loss here is $\log 2 = 0.693$.
+
+### Convexity: one bowl, one bottom
+
+Differentiate the gradient once more to get the Hessian. Since $\partial p_i / \partial \boldsymbol\theta = p_i(1 - p_i)\,\mathbf x_i$,
+
+$$
+H = \frac{1}{n}\sum_{i=1}^{n} p_i (1 - p_i)\, \mathbf x_i \mathbf x_i^\top = \frac{1}{n} X^\top S X, \qquad S = \operatorname{diag}\big(p_i(1 - p_i)\big)
+$$
+
+Every weight $p_i(1 - p_i)$ is positive, so for any vector $\mathbf v$, $\mathbf v^\top H \mathbf v = \frac{1}{n}\sum_i p_i(1 - p_i)(\mathbf x_i^\top \mathbf v)^2 \ge 0$. $H$ is positive semi-definite everywhere, so $J$ is **convex**. If gradient descent finds a point where the gradient is zero, it is the global minimum.
+
+This is the linear regression Hessian $X^\top X$ with each example reweighted by $p_i(1 - p_i)$: examples near the boundary, where $p_i \approx 0.5$, get weight $1/4$; examples the model is sure about get weight near 0. The curvature of the loss comes from the uncertain examples.
+
+There is a catch hiding in "if". Convexity guarantees that any minimum is the global one. It does not guarantee that a minimum exists. We come back to this under [separation](#when-the-best-fit-doesnt-exist-separable-data).
+
+## Fitting it
+
+Setting $\nabla J = \mathbf 0$ gives $X^\top(\sigma(X\boldsymbol\theta) - \mathbf y) = \mathbf 0$. In linear regression the analogous equation was linear in $\boldsymbol\theta$ and could be solved in one step. Here $\boldsymbol\theta$ sits inside a sigmoid, and **there is no closed-form solution**. Logistic regression is always fitted iteratively. The two classic methods are gradient descent and Newton's method.
+
+Try both before reading about them. Take a few gradient steps from zero and watch the curve tilt toward the data, then let Newton's method finish the job. The readout shows the gradient at every point; at the optimum it is zero.
+
+<SigmoidFitter />
+
+Things worth trying:
+
+1. **One gradient step from zero.** Before you press anything, the readout shows the gradient $(-0.875, 0)$ from the worked example. One step moves $w$ to $0.0875$ and leaves $b$ at zero.
+2. **100 steps, then 100 more.** Gradient descent makes quick early progress and then slows down. After 100 steps the loss is 0.478; it takes about 10,000 steps to match Newton's method to three decimal places.
+3. **Fit with Newton's method.** Under ten iterations from zero, to $w = 1.282$, $b = -5.770$, loss 0.3129.
+4. **Switch to the separable data**, where every short trip is on time and every long one late, and repeat. Newton's method pushes $w$ to about 29, far past the end of the slider, before the gradient underflows to zero in floating point. Then add a penalty. The next sections explain what you see.
+
+### Gradient descent
+
+The update is the familiar one, with the logistic gradient:
+
+$$
+\boldsymbol\theta_{t+1} = \boldsymbol\theta_t - \alpha \cdot \frac{1}{n} X^\top \big(\sigma(X\boldsymbol\theta_t) - \mathbf y\big)
+$$
+
+The linear regression article showed that gradient descent on a quadratic is stable when $\alpha \lt 2/\lambda_{\max}(H)$. Log loss is not quadratic, but its Hessian is bounded: because $p(1 - p) \le 1/4$, $H \preceq \frac{1}{4n}X^\top X$ everywhere. So a learning rate below $8 / \lambda_{\max}\!\left(\frac{1}{n}X^\top X\right)$ is safe at every point. For the toy data $\lambda_{\max}\!\left(\frac{1}{n}X^\top X\right) \approx 26.3$, so any $\alpha$ below about 0.30 converges; the interactive uses 0.1. Feature scaling matters for exactly the same conditioning reasons as before.
+
+### Newton's method
+
+Gradient descent uses only the slope. **Newton's method** also uses the curvature. Near the current point it approximates $J$ by a quadratic, using the gradient and the Hessian, and jumps straight to that quadratic's minimum:
+
+$$
+\boldsymbol\theta_{t+1} = \boldsymbol\theta_t - H^{-1}\nabla J(\boldsymbol\theta_t)
+$$
+
+Because the logistic Hessian is cheap to form, $\frac{1}{n}X^\top S X$, Newton's method is the textbook algorithm for logistic regression. Rearranging the update shows that each step is a weighted least-squares fit with weights $p_i(1 - p_i)$, so in statistics it is known as **iteratively reweighted least squares** (IRLS). [_The Elements of Statistical Learning_](https://hastie.su.domains/ElemStatLearn/), §4.4.1, gives the derivation. Near the optimum Newton's method converges **quadratically**: the number of correct digits roughly doubles each iteration.
+
+You can do the first Newton step from zero by hand. At $\boldsymbol\theta = \mathbf 0$ every $p_i(1 - p_i) = 1/4$, so
+
+$$
+H = \frac{1}{32}\begin{bmatrix} 8 & 36 \\ 36 & 204 \end{bmatrix}, \qquad
+\nabla J = \begin{bmatrix} 0 \\ -0.875 \end{bmatrix}
+$$
+
+using $\sum x_i = 36$ and $\sum x_i^2 = 204$. Solving $H\boldsymbol\delta = \nabla J$ gives $\boldsymbol\delta = (3, -0.667)$, so the first step lands on $b = -3$, $w = 0.667$, and the loss drops from 0.693 to 0.363 in one move.
+
+There is a neat reading of that step. With all weights equal to $1/4$, IRLS is ordinary least squares in disguise: the first Newton step is exactly **four times the least-squares line fitted to $y - 0.5$**. That line is $-0.75 + 0.167x$ (the least-squares line from the first section, shifted down by 0.5), and four times it is $-3 + 0.667x$. Logistic regression's first move is linear regression; each later step reweights toward the uncertain examples.
+
+```python title="fit_from_scratch.py"
+import numpy as np
+
+def sigmoid(z):
+    return 1.0 / (1.0 + np.exp(-z))
+
+def log_loss(X, y, theta):
+    p = sigmoid(X @ theta)
+    eps = 1e-15                       # keep log() finite if p hits 0 or 1
+    return -np.mean(y * np.log(p + eps) + (1 - y) * np.log(1 - p + eps))
+
+def gradient_descent(X, y, lr, steps):
+    theta = np.zeros(X.shape[1])
+    for _ in range(steps):
+        p = sigmoid(X @ theta)
+        theta -= lr * X.T @ (p - y) / len(y)
+    return theta
+
+def newton(X, y, tol=1e-10, max_iter=50):
+    theta = np.zeros(X.shape[1])
+    for it in range(1, max_iter + 1):
+        p = sigmoid(X @ theta)
+        grad = X.T @ (p - y) / len(y)
+        hess = X.T @ (X * (p * (1 - p))[:, None]) / len(y)
+        step = np.linalg.solve(hess, grad)
+        theta -= step
+        if np.linalg.norm(step) < tol:
+            return theta, it
+    return theta, max_iter
+
+x = np.array([1, 2, 3, 4, 5, 6, 7, 8], dtype=float)
+y = np.array([0, 0, 0, 1, 0, 1, 1, 1], dtype=float)
+X = np.column_stack([np.ones_like(x), x])
+
+theta, iters = newton(X, y)
+print(f"Newton: {iters} iterations, b = {theta[0]:.4f}, w = {theta[1]:.4f}, "
+      f"loss = {log_loss(X, y, theta):.4f}")
+
+for steps in [100, 1_000, 10_000, 100_000]:
+    theta = gradient_descent(X, y, lr=0.1, steps=steps)
+    print(f"GD {steps:>7} steps: b = {theta[0]:8.4f}, w = {theta[1]:.4f}, "
+          f"loss = {log_loss(X, y, theta):.6f}")
+```
+
+```text
+Newton: 8 iterations, b = -5.7703, w = 1.2823, loss = 0.3129
+GD     100 steps: b =  -1.1960, w = 0.3675, loss = 0.478236
+GD    1000 steps: b =  -4.3722, w = 0.9971, loss = 0.322015
+GD   10000 steps: b =  -5.7689, w = 1.2820, loss = 0.312881
+GD  100000 steps: b =  -5.7703, w = 1.2823, loss = 0.312881
+```
+
+Eight Newton iterations against roughly ten thousand gradient steps. The trade-off is cost per step. A Newton step forms and solves a $(p+1) \times (p+1)$ system, $O(np^2 + p^3)$; a gradient step is $O(np)$. With a few dozen features Newton wins easily. With a million sparse features, or a dataset streamed in mini-batches, forming the Hessian is impossible and first-order methods are the only option. **L-BFGS** ([Liu and Nocedal, 1989](https://doi.org/10.1007/BF01589116)) sits between them: it builds an approximation to the inverse Hessian from the last few gradients, at close to the cost of gradient descent. It is scikit-learn's default solver.
+
+## When the best fit doesn't exist: separable data
+
+Now change one label. Suppose the 4 km delivery had been on time, so every delivery of 4 km or less is on time and every longer one is late. A threshold at any point between 4 and 5 km classifies all eight perfectly. The data are **linearly separable**.
+
+That sounds like good news. For maximum likelihood it is a disaster. Take any boundary between 4 and 5 km and make the sigmoid steeper: multiply $w$ and $b$ by the same factor. The boundary stays put, every training example is still on its correct side, and every probability moves closer to its label, so every term of the loss shrinks. There is always a steeper sigmoid with lower loss. The loss approaches zero but never reaches it, and **no finite $\mathbf w$ minimises it**. The maximum-likelihood estimate does not exist.
+
+```python title="separable.py"
+import numpy as np
+from sklearn.linear_model import LogisticRegression
+
+def sigmoid(z):
+    return 1.0 / (1.0 + np.exp(-z))
+
+x = np.array([1, 2, 3, 4, 5, 6, 7, 8], dtype=float)
+y_sep = np.array([0, 0, 0, 0, 1, 1, 1, 1], dtype=float)  # 4 km and under: always on time
+X = np.column_stack([np.ones_like(x), x])
+
+theta = np.zeros(2)
+for step in range(1, 100_001):
+    theta -= 0.1 * X.T @ (sigmoid(X @ theta) - y_sep) / len(x)
+    if step in (100, 1_000, 10_000, 100_000):
+        p = sigmoid(X @ theta)
+        loss = -np.mean(y_sep * np.log(p) + (1 - y_sep) * np.log(1 - p))
+        print(f"step {step:>7}: w = {theta[1]:6.3f}, "
+              f"boundary = {-theta[0] / theta[1]:.3f} km, loss = {loss:.1e}")
+
+unpenalised = LogisticRegression(C=np.inf).fit(x.reshape(-1, 1), y_sep)
+print(f"sklearn C=inf  : w = {unpenalised.coef_[0, 0]:.3f}, "
+      f"n_iter = {unpenalised.n_iter_[0]}")
+for C in [100.0, 1.0]:
+    model = LogisticRegression(C=C).fit(x.reshape(-1, 1), y_sep)
+    print(f"sklearn C={C:<5}: w = {model.coef_[0, 0]:.3f}, "
+          f"boundary = {-model.intercept_[0] / model.coef_[0, 0]:.3f} km")
+```
+
+```text
+step     100: w =  0.431, boundary = 3.196 km, loss = 4.1e-01
+step    1000: w =  1.322, boundary = 4.293 km, loss = 1.5e-01
+step   10000: w =  3.177, boundary = 4.456 km, loss = 4.9e-02
+step  100000: w =  6.821, boundary = 4.484 km, loss = 8.2e-03
+sklearn C=inf  : w = 18.659, n_iter = 22
+sklearn C=100.0: w = 5.653, boundary = 4.500 km
+sklearn C=1.0  : w = 1.170, boundary = 4.500 km
+```
+
+Gradient descent never stops: $w$ keeps growing, roughly with the logarithm of the step count, while the loss creeps toward zero. Unpenalised scikit-learn stops at $w = 18.7$ after 22 iterations, without any warning, because the improvements fell below its tolerance, not because it found a minimum. Run it with a different tolerance and you get a different "answer". The predicted probabilities from such a model are essentially 0 or 1 everywhere except a sliver around the boundary: wildly overconfident for any new delivery near 4.5 km.
+
+[Albert and Anderson (1984)](https://doi.org/10.1093/biomet/71.1.1) characterised when the maximum-likelihood estimate exists. It does if the classes **overlap**: no hyperplane separates them. It fails under **complete separation**, as here, and under **quasi-complete separation**, where a hyperplane separates them except for ties exactly on it. Separation is not exotic. It becomes likely whenever the number of features is large compared with the number of examples, or a rare category of some feature happens to contain only one class. The breast cancer data below, with 30 features, is separable in training.
+
+### The fix: penalise large weights
+
+The penalty from ridge regression works here too. Add the squared length of the weight vector to the loss:
+
+$$
+J_\lambda(\mathbf w, b) = -\frac{1}{n}\sum_{i=1}^n \Big[\, y_i \log p_i + (1 - y_i)\log(1 - p_i) \Big] + \frac{\lambda}{2}\lVert \mathbf w \rVert^2
+$$
+
+Steepening the sigmoid now has a cost that grows without bound while the loss gain shrinks toward zero, so there is always a finite optimum. The penalised loss is strictly convex in $\mathbf w$, so the optimum is unique. In the interactive, set the data to separable and $\lambda$ to 0.01: Newton's method now converges.
+
+The penalty also has a probabilistic reading. Maximum likelihood with an L2 penalty is **maximum a posteriori** (MAP) estimation with a Gaussian prior on each weight, centred at zero: before seeing data, we believe huge weights are unlikely. The strength of the penalty is the inverse of the prior variance. An L1 penalty, $\lambda\sum_j \lvert w_j \rvert$, corresponds to a Laplace prior and, as with the lasso, sets some weights exactly to zero. [Firth's (1993)](https://doi.org/10.1093/biomet/80.1.27) penalised likelihood is another remedy, popular in medical statistics, that gives finite estimates under separation with less bias than a ridge penalty.
+
+> [!IMPORTANT]
+> scikit-learn's `LogisticRegression` is **regularised by default**, with an L2 penalty and `C=1.0`. `C` is the _inverse_ of the penalty strength: smaller `C`, stronger penalty. Written as scikit-learn minimises it, the objective is $C\sum_i \ell_i + \frac{1}{2}\lVert \mathbf w \rVert^2$, which matches the $\lambda$ form above with $C = 1/(n\lambda)$. Coefficients from `LogisticRegression()` are not maximum-likelihood estimates, and they will not match `statsmodels` or R's `glm` unless you set `C=np.inf`. Since scikit-learn 1.8 the `penalty` argument is deprecated: use `C=np.inf` for no penalty and `l1_ratio` to choose between L2 (0), L1 (1) and elastic net.
+
+**Check your understanding**
+
+<details>
+<summary>On separable data, the decision boundary from gradient descent converges (to 4.5 km here) even though w diverges. Is the boundary meaningful?</summary>
+
+It is, and this is a known result: for separable data, the direction of $\boldsymbol\theta$ found by gradient descent on log loss converges to the maximum-margin separator, the same one a hard-margin support vector machine finds (Soudry et al., [The Implicit Bias of Gradient Descent on Separable Data](https://jmlr.org/papers/v19/18-188.html), JMLR 2018). The convergence is very slow, logarithmic in the number of steps, which you can see in the boundary column above. What is not meaningful is the _scale_ of $\boldsymbol\theta$, and so the probabilities.
+
+</details>
+
+<details>
+<summary>Separation means the model classifies every training example correctly. Why is that a problem rather than a success?</summary>
+
+Training accuracy is not the goal. With enough features, almost any labelling of a small dataset is separable, including random labels. The unpenalised model then reports probabilities of 0 and 1 for patterns it has seen a handful of times, and its log loss on new data can be enormous. The breast cancer experiment below shows exactly that: perfect training accuracy, and a test log loss 25 times worse than the regularised model.
+
+</details>
+
+## Decision boundaries beyond straight lines
+
+The boundary $\mathbf w^\top \mathbf x + b = 0$ is a hyperplane in feature space. With raw features, logistic regression can only draw straight lines between classes. But, exactly as with linear regression, _linear_ refers to the parameters. If you give the model transformed features, the boundary is a hyperplane in the transformed space and can be curved in the original one.
+
+<Figure
+  light={boundaryLight}
+  dark={boundaryDark}
+  alt="Three scatter plots of two classes in two dimensions with the model's 0.5 contour drawn in red and the 0.1 and 0.9 contours dashed. Left: two overlapping clouds separated by a straight line, test accuracy 0.90. Middle: one class forms a disc inside a ring of the other; a straight line cuts through both, test accuracy 0.52. Right: the same disc and ring with squared and product features added; the 0.5 contour is a circle between them, test accuracy 0.99."
+  caption="Synthetic data (scikit-learn make_blobs and make_circles, random_state=1), 70/30 split, LogisticRegression with default settings. The 0.1 and 0.9 contours show how quickly confidence grows away from the boundary. Middle: no straight line can separate a disc from a ring. Right: adding x₁², x₂² and x₁x₂ turns the circle into a hyperplane in the expanded feature space."
+/>
+
+In the left panel the classes are two overlapping clouds, and the contours for 0.1, 0.5 and 0.9 are parallel lines: the probability depends only on the distance from the boundary along $\mathbf w$. In the middle, one class encloses the other. Every straight line does roughly as badly as guessing, and the model's test accuracy is 0.52. In the right panel the model is the same, but the features include $x_1^2$, $x_2^2$ and $x_1 x_2$. A circle $x_1^2 + x_2^2 = r^2$ is linear in those features, so the model can draw it.
+
+Feature engineering is how logistic regression handles non-linearity: polynomial terms, interactions, logs, splines and bins. The cost is the same as in linear regression: more features mean more ways to overfit, and the need for regularisation grows with them. When you find yourself engineering many interactions by hand, that is the point to consider tree ensembles or neural networks, which learn them. A neural network classifier can be seen as logistic regression whose features are learned by the layers before it.
+
+## A real problem: breast tumour diagnosis
+
+The deliveries were invented to be easy to compute by hand. Now for a real problem.
+
+The **Wisconsin Diagnostic Breast Cancer** dataset ([Wolberg, Mangasarian, Street and Street, UCI repository](https://doi.org/10.24432/C5DW2B)) was introduced by [Street, Wolberg and Mangasarian (1993)](https://doi.org/10.1117/12.148698). Each of its 569 rows is a breast mass sampled by fine-needle aspiration. An image of the sample was digitised and the cell nuclei outlined, and ten properties of the nuclei were measured: radius, texture, perimeter, area, smoothness, compactness, concavity, concave points, symmetry and fractal dimension. Each property appears three times: its mean across the nuclei in the image, its standard error (named `... error`), and the mean of the three largest values (named `worst ...`). That gives 30 features. The label is the diagnosis: 212 malignant, 357 benign.
+
+One quirk matters. scikit-learn's [`load_breast_cancer`](https://scikit-learn.org/stable/modules/generated/sklearn.datasets.load_breast_cancer.html) codes **malignant as 0** and benign as 1. Every metric below that depends on a "positive class" would then be about detecting benign tumours. The code flips the labels so that 1 means malignant.
+
+The experiment:
+
+- **Split:** 80% training (455 patients), 20% test (114), stratified so both sets have the same malignant fraction, `random_state=42`. The test set is not touched until the end.
+- **Model:** standardise every feature using training-set statistics, then `LogisticRegression(C=1.0)`, scikit-learn's defaults, inside a `Pipeline` so the scaler is fitted only on training data.
+- **Baseline:** a `DummyClassifier` that predicts the training-set malignant rate, 37.4%, for every patient.
+- **Metrics:** accuracy, log loss, Brier score, ROC-AUC and PR-AUC on the test set, explained in the [evaluation section](#evaluating-a-classifier).
+
+```python title="breast_cancer.py"
+import numpy as np
+from sklearn.datasets import load_breast_cancer
+from sklearn.dummy import DummyClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (accuracy_score, average_precision_score, brier_score_loss,
+                             confusion_matrix, log_loss, roc_auc_score)
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+data = load_breast_cancer(as_frame=True)
+X = data.data
+y = 1 - data.target            # sklearn codes malignant as 0; make malignant the positive class
+print(X.shape, "malignant:", int(y.sum()), "benign:", int((1 - y).sum()))
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, stratify=y, random_state=42
+)
+
+model = make_pipeline(StandardScaler(), LogisticRegression(C=1.0))
+model.fit(X_train, y_train)
+baseline = DummyClassifier(strategy="prior").fit(X_train, y_train)
+
+for name, est in [("baseline (prior)", baseline), ("logistic regression", model)]:
+    proba = est.predict_proba(X_test)[:, 1]
+    pred = est.predict(X_test)
+    print(f"{name:>20}: accuracy={accuracy_score(y_test, pred):.3f}  "
+          f"log loss={log_loss(y_test, proba):.3f}  Brier={brier_score_loss(y_test, proba):.3f}  "
+          f"ROC-AUC={roc_auc_score(y_test, proba):.3f}  PR-AUC={average_precision_score(y_test, proba):.3f}")
+
+print(confusion_matrix(y_test, model.predict(X_test)))
+```
+
+```text
+(569, 30) malignant: 212 benign: 357
+    baseline (prior): accuracy=0.632  log loss=0.658  Brier=0.233  ROC-AUC=0.500  PR-AUC=0.368
+ logistic regression: accuracy=0.965  log loss=0.077  Brier=0.021  ROC-AUC=0.996  PR-AUC=0.994
+[[71  1]
+ [ 3 39]]
+```
+
+Run with NumPy 2.5, scikit-learn 1.9 and Python 3.12.
+
+The model gets 110 of 114 test patients right. In the confusion matrix (rows are the true class, benign then malignant; columns the prediction), the errors are one benign tumour flagged as malignant and **three malignant tumours predicted benign**. Those three are the errors that matter most, and the evaluation section is largely about them.
+
+### From scratch, and what the library adds
+
+The from-scratch Newton solver above, with an L2 penalty added that leaves the intercept alone, fits the same model:
+
+```python title="scratch_vs_sklearn.py"
+import numpy as np
+from sklearn.datasets import load_breast_cancer
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+
+def sigmoid(z):
+    return 1.0 / (1.0 + np.exp(-z))
+
+def fit_logistic_newton(X, y, C=1.0, tol=1e-10, max_iter=50):
+    """Minimise  sum_i log_loss_i + ||w||^2 / (2C)  by Newton's method.
+
+    X must not contain a column of ones; the intercept is handled separately
+    and is not penalised, matching scikit-learn.
+    """
+    n, d = X.shape
+    A = np.column_stack([np.ones(n), X])
+    penalty = np.full(d + 1, 1.0 / C)
+    penalty[0] = 0.0                                  # no penalty on the intercept
+    theta = np.zeros(d + 1)
+    for it in range(1, max_iter + 1):
+        p = sigmoid(A @ theta)
+        grad = A.T @ (p - y) + penalty * theta
+        hess = A.T @ (A * (p * (1 - p))[:, None]) + np.diag(penalty)
+        step = np.linalg.solve(hess, grad)
+        theta -= step
+        if np.linalg.norm(step) < tol:
+            break
+    return theta[0], theta[1:], it
+
+data = load_breast_cancer(as_frame=True)
+X, y = data.data, 1 - data.target
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, stratify=y, random_state=42
+)
+scaler = StandardScaler().fit(X_train)
+Z_train = scaler.transform(X_train)
+
+b, w, iters = fit_logistic_newton(Z_train, y_train.to_numpy(), C=1.0)
+sk = LogisticRegression(C=1.0, tol=1e-10, max_iter=1000).fit(Z_train, y_train)
+
+print(f"Newton converged in {iters} iterations")
+print("max |coef difference| :", np.abs(w - sk.coef_[0]).max())
+print("intercept difference  :", abs(b - sk.intercept_[0]))
+```
+
+```text
+Newton converged in 10 iterations
+max |coef difference| : 1.2118984182851733e-06
+intercept difference  : 6.782782258074604e-08
+```
+
+Agreement to about $10^{-6}$, the limit of L-BFGS's stopping tolerance. Same objective, same optimum. What [`LogisticRegression`](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html) adds:
+
+- **A choice of solvers**, documented in the [user guide](https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression). `lbfgs` (default) is a quasi-Newton method and a good general choice. `newton-cholesky` is the exact Newton method above, fast when there are many more examples than features. `liblinear` is a coordinate-descent library ([Fan et al., 2008](https://www.jmlr.org/papers/v9/fan08a.html)), good for small sparse problems, but it is binary-only and it **penalises the intercept**, which the others don't. `saga` is a stochastic method for very large data and the only solver that supports elastic net.
+- **Convergence diagnostics.** A `ConvergenceWarning` means the solver hit `max_iter` before meeting its tolerance. On this dataset, fitting without the `StandardScaler` triggers it: the features range from under 0.001 (`fractal dimension error`) to over 4,000 (`worst area`), the problem is badly conditioned, and L-BFGS runs out of its default 100 iterations. The resulting test accuracy drops to 0.921. Scale first, as for any gradient-based method.
+- **Class weights, sample weights, multiclass support** and the estimator interface, so the model fits into pipelines and cross-validation.
+
+What it doesn't do is report standard errors or p-values. For inference on coefficients, `statsmodels`' `Logit` fits the unpenalised maximum-likelihood model and reports them; on this dataset it would run straight into the separation problem.
+
+## Choosing the regularisation strength
+
+`C=1.0` is a default, not a decision. Like ridge regression's $\lambda$, it is a hyperparameter: the training loss always prefers no penalty, so it must be chosen on data the model didn't fit, by cross-validation on the training set. The natural score is log loss, since that is what the model is supposed to get right.
+
+```python title="choose_c.py"
+import numpy as np
+from sklearn.datasets import load_breast_cancer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import log_loss
+from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+data = load_breast_cancer(as_frame=True)
+X, y = data.data, 1 - data.target
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, stratify=y, random_state=42
+)
+
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
+for C in [0.01, 0.1, 1.0, 10.0, 100.0, np.inf]:
+    pipe = make_pipeline(StandardScaler(), LogisticRegression(C=C, max_iter=10_000))
+    scores = -cross_val_score(pipe, X_train, y_train, cv=cv, scoring="neg_log_loss")
+    pipe.fit(X_train, y_train)
+    train_acc = pipe.score(X_train, y_train)
+    max_coef = np.abs(pipe[-1].coef_).max()
+    print(f"C={C:>6}: CV log loss = {scores.mean():.3f} ± {scores.std():.3f}, "
+          f"train accuracy = {train_acc:.3f}, max |w| = {max_coef:7.2f}")
+
+# Only now, for the two extremes, look at the test set.
+for C in [1.0, np.inf]:
+    pipe = make_pipeline(StandardScaler(), LogisticRegression(C=C, max_iter=10_000))
+    proba = pipe.fit(X_train, y_train).predict_proba(X_test)[:, 1]
+    print(f"test, C={C}: accuracy = {pipe.score(X_test, y_test):.3f}, "
+          f"log loss = {log_loss(y_test, proba):.3f}")
+```
+
+```text
+C=  0.01: CV log loss = 0.193 ± 0.017, train accuracy = 0.954, max |w| =    0.24
+C=   0.1: CV log loss = 0.103 ± 0.016, train accuracy = 0.980, max |w| =    0.61
+C=   1.0: CV log loss = 0.083 ± 0.031, train accuracy = 0.987, max |w| =    1.43
+C=  10.0: CV log loss = 0.126 ± 0.081, train accuracy = 0.989, max |w| =    3.39
+C= 100.0: CV log loss = 0.227 ± 0.144, train accuracy = 0.993, max |w| =    8.20
+C=   inf: CV log loss = 1.021 ± 0.321, train accuracy = 1.000, max |w| =  576.54
+test, C=1.0: accuracy = 0.965, log loss = 0.077
+test, C=inf: accuracy = 0.939, log loss = 1.969
+```
+
+The whole bias-variance trade-off is in this table.
+
+- **Training accuracy rises monotonically** as the penalty weakens, reaching 1.000 without a penalty: the training set is separable, and the largest weight reaches 577 before L-BFGS gives up.
+- **Cross-validated log loss is U-shaped.** A strong penalty ($C = 0.01$) shrinks the weights so much that the probabilities are timid: underfitting. A weak penalty lets the weights grow to chase the training labels: overfitting. The minimum is near $C = 1$ here, so the default happens to be a good choice on this dataset; that is luck, not a rule.
+- **The unpenalised model is a disaster on log loss** and only mildly worse on accuracy. Its test accuracy, 0.939, looks respectable. Its test log loss, 1.969, is 25 times worse than the regularised model's, and worse than the baseline's 0.658. It is confidently wrong: a few test patients it has never seen get probabilities like $10^{-10}$ for the diagnosis they actually have. Accuracy hides this; log loss doesn't.
+
+`LogisticRegressionCV` automates this search efficiently, reusing each fit as the starting point for the next value of `C`. As always, the scaler lives inside the pipeline so it is refitted in every fold; scaling the full dataset before cross-validating leaks the held-out folds' statistics into training. The linear regression article's section on [preprocessing without leaking](/blog/linear_regression#preprocessing-without-leaking) covers the rules.
+
+## Evaluating a classifier
+
+A regression model is wrong by some amount. A classifier can be wrong in two different directions, and its probabilities can be good or bad separately from its decisions. So classification needs more than one metric, and it is worth being clear about what each one measures.
+
+### Is it better than guessing?
+
+**Accuracy**, the fraction of correct predictions, is the obvious first number, and on its own it is close to useless. The baseline that never predicts malignant gets 63.2% here, because 63.2% of patients are benign. On a problem with 1% positives, a model that always says "negative" scores 99%. Always report accuracy next to the majority-class rate, and prefer the metrics below.
+
+### Are the probabilities good?
+
+Two metrics score the probabilities directly, before any threshold.
+
+**Log loss**, the training loss, evaluated on test data: 0.077 for the model against 0.658 for the baseline. It is the strictest metric here, and the one that exposed the unpenalised model.
+
+The **Brier score**, introduced by Glenn Brier in 1950 for weather forecasts, is the mean squared error between probability and label, $\frac{1}{n}\sum_i (p_i - y_i)^2$: 0.021 against 0.233. It is the squared error we rejected as a _training_ loss; as an evaluation metric it is useful because it is bounded and less dominated by a single confident mistake than log loss.
+
+Both are **proper scoring rules**: they are minimised in expectation by reporting the true probability, so they reward honesty. Accuracy is not; it cannot tell a 51% prediction from a 99% one.
+
+### Are the probabilities calibrated?
+
+A model is **calibrated** if, among the patients it gives a 20% probability, about 20% turn out to be malignant. Calibration is what lets you treat the output as a probability in a decision rule, and it is checked by binning predictions and comparing each bin's mean prediction with the observed rate. With only 114 test patients the bins would be tiny, so this check uses **out-of-fold** predictions on the training set: each patient is scored by a cross-validation model that did not see it.
+
+```python title="calibration.py"
+import numpy as np
+from sklearn.calibration import calibration_curve
+from sklearn.datasets import load_breast_cancer
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import StratifiedKFold, cross_val_predict, train_test_split
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+data = load_breast_cancer(as_frame=True)
+X, y = data.data, 1 - data.target
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, stratify=y, random_state=42
+)
+
+# Out-of-fold probabilities: each training patient is scored by a model
+# that did not see it. 455 predictions instead of the test set's 114.
+pipe = make_pipeline(StandardScaler(), LogisticRegression(C=1.0))
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
+oof = cross_val_predict(pipe, X_train, y_train, cv=cv, method="predict_proba")[:, 1]
+
+observed, predicted = calibration_curve(y_train, oof, n_bins=5, strategy="quantile")
+for p, o in zip(predicted, observed):
+    print(f"mean predicted {p:.3f}  ->  observed malignant rate {o:.3f}")
+
+balanced = make_pipeline(StandardScaler(), LogisticRegression(C=1.0, class_weight="balanced"))
+balanced.fit(X_train, y_train)
+plain = pipe.fit(X_train, y_train)
+print(f"intercept: plain = {plain[-1].intercept_[0]:.3f}, "
+      f"balanced = {balanced[-1].intercept_[0]:.3f}, "
+      f"log(n_benign / n_malignant) = {np.log((1 - y_train).sum() / y_train.sum()):.3f}")
+```
+
+```text
+mean predicted 0.000  ->  observed malignant rate 0.000
+mean predicted 0.002  ->  observed malignant rate 0.011
+mean predicted 0.047  ->  observed malignant rate 0.033
+mean predicted 0.811  ->  observed malignant rate 0.824
+mean predicted 1.000  ->  observed malignant rate 1.000
+intercept: plain = -0.243, balanced = 0.167, log(n_benign / n_malignant) = 0.517
+```
+
+(The last line is used in the [class imbalance](#class-imbalance) section.) Each bin holds 91 patients. Predicted and observed rates agree closely: when the model says about 81%, about 82% are malignant. This is typical of logistic regression. Because it is trained with a proper scoring rule, it tends to produce well-calibrated probabilities when the model is roughly right and regularisation is not extreme. [Niculescu-Mizil and Caruana (2005)](https://doi.org/10.1145/1102351.1102430) compared ten learning methods and found logistic regression among the best calibrated out of the box, while boosted trees, SVMs and naive Bayes needed recalibration. It is not guaranteed: a misspecified model, heavy regularisation or resampled training data all distort calibration. scikit-learn's [calibration guide](https://scikit-learn.org/stable/modules/calibration.html) covers checking and fixing it.
+
+The five bins also show something about this dataset: the predictions are bunched near 0 and 1. Most tumours are easy. The interesting patients are the handful in between.
+
+### Choosing a threshold
+
+To act, we need a threshold $t$: predict malignant when $p \ge t$. Each choice of $t$ gives a **confusion matrix**, and the matrix gives the error-specific metrics.
+
+- **Recall** (sensitivity, true positive rate) $= \frac{TP}{TP + FN}$: of the malignant tumours, what fraction did we catch?
+- **Precision** $= \frac{TP}{TP + FP}$: of the tumours we flagged, what fraction were malignant?
+- **Specificity** $= \frac{TN}{TN + FP}$: of the benign tumours, what fraction did we clear? One minus specificity is the **false positive rate**.
+- **F1** is the harmonic mean of precision and recall: a single number that is high only if both are.
+
+Lowering the threshold flags more patients: recall goes up, precision usually goes down. Move it yourself. Every dot below is a real test patient, at the probability the model above gave it.
+
+<ThresholdExplorer />
+
+At a few thresholds:
+
+| Threshold |  TP |  FP |  FN |  TN | Precision | Recall |
+| --------: | --: | --: | --: | --: | --------: | -----: |
+|       0.9 |  33 |   0 |   9 |  72 |     1.000 |  0.786 |
+|       0.5 |  39 |   1 |   3 |  71 |     0.975 |  0.929 |
+|       0.3 |  41 |   1 |   1 |  71 |     0.976 |  0.976 |
+|       0.1 |  41 |   5 |   1 |  67 |     0.891 |  0.976 |
+|      0.05 |  42 |  11 |   0 |  61 |     0.792 |  1.000 |
+
+At the default 0.5, three cancers are missed. Their probabilities were 0.49, 0.31 and 0.06. Lowering the threshold to 0.3 catches two of them at no extra cost on this test set. Catching the third requires going down to 0.05, at the price of eleven false alarms out of 72 benign patients.
+
+Which is right? That is not a statistical question. If the probabilities are calibrated and the costs of the two errors are $C_{FN}$ (a missed cancer) and $C_{FP}$ (an unnecessary biopsy), predicting positive is worth it when the expected cost of saying "benign", $p \cdot C_{FN}$, exceeds the expected cost of saying "malignant", $(1 - p) \cdot C_{FP}$. Solving for $p$:
+
+$$
+t^* = \frac{C_{FP}}{C_{FP} + C_{FN}}
+$$
+
+Equal costs give $t^* = 0.5$, which is where the default comes from. If a missed cancer is judged 20 times worse than a false alarm, $t^* = 1/21 \approx 0.05$. The model supplies probabilities; the threshold encodes values. Keep the two separate, and choose the threshold on validation data, not on the test set: picking it by looking at the table above, as we just did for illustration, would make the test results optimistic.
+
+> [!WARNING]
+> Don't tune the threshold to maximise accuracy or F1 on the test set and then report those numbers. The threshold is a hyperparameter like any other. Choose it with cross-validation or a separate validation split, and touch the test set once. scikit-learn's [`TunedThresholdClassifierCV`](https://scikit-learn.org/stable/modules/classification_threshold.html) does this inside cross-validation.
+
+### Ranking quality: ROC and PR curves
+
+The **ROC curve** plots the true positive rate against the false positive rate as the threshold sweeps from 1 to 0; it is the curve in the explorer. A model that guesses lies on the diagonal. The **area under it**, ROC-AUC, has a direct reading: the probability that a randomly chosen malignant case gets a higher score than a randomly chosen benign one ([Hanley and McNeil, 1982](https://doi.org/10.1148/radiology.143.1.7063747)). Here it is 0.996: the model's ranking is nearly perfect, and the misses at 0.5 are a threshold problem as much as a model problem. ROC-AUC ignores calibration entirely; any increasing transformation of the scores gives the same curve.
+
+When positives are rare, ROC-AUC can look excellent while precision is poor, because the false positive rate divides by the large number of negatives. The **precision-recall curve** and its summary, **average precision** (PR-AUC, `average_precision_score`), are more informative then; [Saito and Rehmsmeier (2015)](https://doi.org/10.1371/journal.pone.0118432) make the case with examples. A guessing model's PR-AUC equals the positive rate, which is why the baseline scored 0.368.
+
+| Metric      | Measures                             | Threshold? | Use it when                                                                            |
+| ----------- | ------------------------------------ | ---------- | -------------------------------------------------------------------------------------- |
+| Accuracy    | Fraction correct                     | Yes        | Classes are balanced and errors cost the same. Always compare with the majority rate.  |
+| Precision   | Flagged cases that are real          | Yes        | False alarms are expensive: alerts that people must act on.                            |
+| Recall      | Real cases that are flagged          | Yes        | Misses are expensive: screening, fraud, safety.                                        |
+| F1          | Balance of precision and recall      | Yes        | You need one threshold-dependent number and both errors matter.                        |
+| ROC-AUC     | Ranking of positives above negatives | No         | Comparing models' ranking ability, classes not extremely imbalanced.                   |
+| PR-AUC      | Precision across all recall levels   | No         | Positives are rare and you care about the flagged set.                                 |
+| Log loss    | Quality of the probabilities         | No         | Probabilities feed a decision or another model. The strictest check of overconfidence. |
+| Brier score | Squared error of the probabilities   | No         | As log loss, when one confident mistake shouldn't dominate.                            |
+
+## Class imbalance
+
+Imbalance changes logistic regression less than people expect. The model's intercept absorbs the base rate: with fewer positives, $b$ is lower and every probability is lower, which is correct, because positives _are_ less likely.
+
+The common reflex is to "fix" imbalance by weighting the minority class up (`class_weight="balanced"`) or resampling. For logistic regression, the main effect of reweighting is to **shift the intercept**. Weighting positives by $a$ and negatives by $c$ multiplies the odds the model reports by roughly $a/c$. With balanced weights that factor is $n_{\text{neg}}/n_{\text{pos}}$, a log-odds shift of $\log(285/170) = 0.517$ on this training set. The calibration script above shows the intercept moving from $-0.243$ to $0.167$, a shift of $0.41$: close to the theory, which holds exactly only for a correctly specified, unpenalised model. The ranking of patients barely changes. The probabilities, though, are no longer calibrated: they describe a world where the classes are balanced, which is not the one the model will be used in.
+
+So for logistic regression, the usual advice is:
+
+- **Keep the probabilities honest and move the threshold.** Train without reweighting, check calibration, and pick $t$ from the costs as above. This gives the same decisions reweighting would, without corrupting the probabilities.
+- **Use metrics that respect imbalance:** PR-AUC, recall at a fixed precision, or expected cost. Not accuracy.
+- **Reweight when the optimiser needs it,** for example with extreme imbalance and few positives, where the regularised fit may barely move off the base rate. If you do, recalibrate afterwards, or shift the intercept back by $\log(a/c)$.
+
+## Reading the coefficients
+
+A large part of logistic regression's appeal is that its weights can be read. With standardised features, $e^{w_j}$ is the factor by which the odds of malignancy are multiplied for a one-standard-deviation increase in feature $j$, holding the other features fixed.
+
+```python title="coefficients.py"
+import numpy as np
+from sklearn.datasets import load_breast_cancer
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+data = load_breast_cancer(as_frame=True)
+X, y = data.data, 1 - data.target
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, stratify=y, random_state=42
+)
+model = make_pipeline(StandardScaler(), LogisticRegression(C=1.0)).fit(X_train, y_train)
+
+coef = model[-1].coef_[0]
+for j in np.argsort(-np.abs(coef))[:8]:
+    print(f"{X.columns[j]:>20}: w = {coef[j]:6.3f}, odds ratio per SD = {np.exp(coef[j]):.2f}")
+
+print(X_train[["mean radius", "mean perimeter", "mean area"]].corr().round(3))
+
+# Refit on 200 bootstrap resamples of the training set: how stable are the weights?
+rng = np.random.default_rng(0)
+boot = []
+for _ in range(200):
+    idx = rng.integers(0, len(X_train), len(X_train))
+    refit = make_pipeline(StandardScaler(), LogisticRegression(C=1.0))
+    boot.append(refit.fit(X_train.iloc[idx], y_train.iloc[idx])[-1].coef_[0])
+lo, hi = np.percentile(np.array(boot), [2.5, 97.5], axis=0)
+print(f"weights whose 95% bootstrap interval contains 0: {((lo < 0) & (hi > 0)).sum()} of 30")
+```
+
+```text
+       worst texture: w =  1.434, odds ratio per SD = 4.20
+        radius error: w =  1.233, odds ratio per SD = 3.43
+      worst symmetry: w =  1.061, odds ratio per SD = 2.89
+ mean concave points: w =  0.953, odds ratio per SD = 2.59
+     worst concavity: w =  0.911, odds ratio per SD = 2.49
+          area error: w =  0.909, odds ratio per SD = 2.48
+   compactness error: w = -0.907, odds ratio per SD = 0.40
+          worst area: w =  0.900, odds ratio per SD = 2.46
+                mean radius  mean perimeter  mean area
+mean radius           1.000           0.998      0.987
+mean perimeter        0.998           1.000      0.986
+mean area             0.987           0.986      1.000
+weights whose 95% bootstrap interval contains 0: 12 of 30
+```
+
+Read naively: each standard deviation of `worst texture` multiplies the odds of malignancy by 4.2, and `compactness error` is protective. Be careful with both readings.
+
+- **The features are heavily correlated.** Radius, perimeter and area are three measurements of the same nucleus size, correlated at 0.99 or more, and the same holds for their `error` and `worst` versions. As in the linear regression article's [multicollinearity section](/blog/linear_regression#correlated-features-make-coefficients-unstable), the data determine the _combined_ effect of correlated features well and how to split it between them poorly. Across 200 bootstrap refits, 12 of the 30 weights have intervals that include zero: the data don't even determine their sign. `compactness error` is not one of them (it is negative in every refit), but a stable negative weight on one of a cluster of correlated shape features is more plausibly a correction to its partners' positive weights than a protective effect. The model only promises that the combination predicts well.
+- **The weights here are shrunk.** With `C=1.0` they are pulled toward zero, and correlated features share the shrinkage. Odds ratios from a penalised model are biased toward 1.
+- **Odds ratios are not probability changes.** A factor of 4.2 on the odds moves a 1% probability to 4%, and a 50% probability to 81%.
+- **Association, not causation.** These are cell measurements made after the fact. Nothing about the model says changing a nucleus's texture changes anything.
+
+For explaining individual predictions, the score decomposes exactly: $z = b + \sum_j w_j x_j$, so each feature's contribution to a patient's log-odds is $w_j x_j$. That additivity in log-odds is what makes logistic regression easy to audit, and it is why it remains common in regulated settings such as credit scoring.
+
+## More than two classes: softmax
+
+With $K \gt 2$ classes, logistic regression generalises to **multinomial logistic regression**, also called softmax regression. Each class $k$ gets its own weight vector and bias, and so its own score $z_k = \mathbf w_k^\top \mathbf x + b_k$. The **softmax** function turns the $K$ scores into a probability distribution:
+
+$$
+P(y = k \mid \mathbf x) = \frac{e^{z_k}}{\sum_{j=1}^{K} e^{z_j}}
+$$
+
+Every output is positive and they sum to 1. Adding the same constant to every score leaves the probabilities unchanged, so only differences between scores matter. With $K = 2$, the probability of class 1 is $e^{z_1} / (e^{z_0} + e^{z_1}) = \sigma(z_1 - z_0)$: binary logistic regression, with the score being the difference of the two class scores.
+
+The loss is again the negative log-likelihood, $-\log P(y = y_i \mid \mathbf x_i)$, the **categorical cross-entropy**. Writing the label as a one-hot vector $\mathbf y_i$ and the predicted distribution as $\mathbf p_i$, the same cancellation as before gives
+
+$$
+\frac{\partial \ell_i}{\partial \mathbf z_i} = \mathbf p_i - \mathbf y_i
+$$
+
+Prediction minus label again, now a vector. This is precisely the gradient that starts backpropagation in every neural-network classifier: the last layer of such a network _is_ multinomial logistic regression, on features learned by the layers below.
+
+scikit-learn fits the multinomial model by default for three or more classes (all solvers except `liblinear`). The fitted model is literally the formula above:
+
+```python title="softmax_check.py"
+import numpy as np
+from sklearn.datasets import load_iris
+from sklearn.linear_model import LogisticRegression
+
+X, y = load_iris(return_X_y=True)          # 150 flowers, 4 features, 3 species
+model = LogisticRegression(max_iter=1000).fit(X, y)
+
+scores = X @ model.coef_.T + model.intercept_          # (150, 3) logits
+scores -= scores.max(axis=1, keepdims=True)            # stability; softmax is shift-invariant
+softmax = np.exp(scores) / np.exp(scores).sum(axis=1, keepdims=True)
+
+print("coef_ shape:", model.coef_.shape)
+print("max |softmax − predict_proba|:", np.abs(softmax - model.predict_proba(X)).max())
+print("rows sum to 1:", np.allclose(softmax.sum(axis=1), 1.0))
+```
+
+```text
+coef_ shape: (3, 4)
+max |softmax − predict_proba|: 0.0
+rows sum to 1: True
+```
+
+The weight matrix is $K \times p$: one row of four weights per species. Subtracting each row's maximum score before exponentiating is the standard trick to avoid overflow; the shift invariance means it changes nothing else.
+
+The alternative is **one-vs-rest**: train $K$ independent binary classifiers, "class $k$ or not", and pick the most confident. It is simple and parallel, but the $K$ probabilities don't sum to 1 and aren't jointly calibrated. scikit-learn provides it as `OneVsRestClassifier`; prefer the multinomial model unless you have a reason not to.
+
+## Common misconceptions
+
+**"Logistic regression is a regression method."** The name is historical. It regresses the _log-odds_ on the features, and it is used as a classifier. It is a generalised linear model: a linear predictor, a Bernoulli distribution for the response, and the logit as the link between them ([Nelder and Wedderburn, 1972](https://doi.org/10.2307/2344614)).
+
+**"Its output is a probability, so it is calibrated."** Its output is in $[0, 1]$. Whether it means what it says depends on the model being roughly right, the regularisation, and whether the training data were reweighted or resampled. Check with a calibration curve.
+
+**"Classify at 0.5."** 0.5 is optimal only when both errors cost the same and the probabilities are calibrated. The breast cancer example shows thresholds from 0.05 to 0.3 being defensible.
+
+**"Logistic regression can only draw straight boundaries."** Its boundary is linear in the features you give it. With polynomial, interaction or spline features, it draws curves and circles.
+
+**"Separable data is the easy case."** For unpenalised maximum likelihood it is the broken case: the weights go to infinity and the probabilities become meaningless. Regularise.
+
+**"Accuracy tells you how good the model is."** Accuracy ignores the probabilities, hides the direction of errors, and is inflated by imbalance. The unpenalised model had 94% test accuracy and a test log loss worse than predicting the base rate.
+
+**"Imbalanced data needs resampling or class weights."** For logistic regression these mostly shift the intercept and break calibration. Threshold choice usually does the same job better.
+
+**"You must scale features."** Scaling doesn't change the unpenalised maximum-likelihood fit at all, only its conditioning. It does matter for the optimiser's convergence and, because the penalty depends on weight size, it changes the regularised solution. With scikit-learn's default penalty, you are in the second case.
+
+## When to use it
+
+Logistic regression is a strong choice when:
+
+- **You need probabilities**, not just labels, especially well-calibrated ones that feed a cost-based decision or another system.
+- **You need to explain or audit the model.** Each prediction is a sum of per-feature contributions to the log-odds, and each weight has a stated meaning.
+- **Data are limited relative to the number of features.** A regularised linear model is hard to beat with a few hundred examples.
+- **Training and serving must be cheap.** A prediction is one dot product and one exponential; it scales to billions of sparse features with first-order solvers, which is why it was long the workhorse of click-through-rate prediction.
+- **You need a baseline.** If a gradient-boosted ensemble can't clearly beat regularised logistic regression on log loss, the extra complexity may not be worth it.
+
+Look further when the relationship involves strong non-linearities or interactions you can't engineer by hand (tree ensembles, neural networks), or when the data are images, audio or text, where the useful features have to be learned. Even then, logistic regression usually survives as the final layer.
+
+## Summary
+
+- Logistic regression models the **log-odds** of the positive class as a linear function of the features. Inverting the logit gives $p = \sigma(\mathbf w^\top \mathbf x + b)$.
+- Each weight adds to the log-odds, so $e^{w_j}$ is an **odds ratio**. The decision boundary $\mathbf w^\top \mathbf x + b = 0$ is a hyperplane; the threshold that turns probabilities into actions is a separate choice.
+- **Maximum likelihood** under a Bernoulli model gives the log loss. It punishes confident mistakes without limit, which keeps the probabilities honest.
+- The gradient of log loss with respect to the score is $p - y$, so $\nabla J = \frac{1}{n}X^\top(\mathbf p - \mathbf y)$: the linear regression gradient with a sigmoid inside. The Hessian $\frac{1}{n}X^\top S X$ is positive semi-definite, so the loss is convex.
+- There is no closed form. Newton's method (IRLS) converges in a handful of iterations; gradient descent and L-BFGS scale further.
+- On **separable** data the maximum-likelihood estimate doesn't exist and the weights diverge. An L2 penalty, which is a Gaussian prior, restores a finite, unique solution. scikit-learn applies one by default.
+- Evaluate the probabilities (log loss, Brier, calibration), the ranking (ROC-AUC, PR-AUC) and the decisions (confusion matrix, precision, recall) separately. Choose the threshold from the costs of errors, on validation data.
+- Softmax regression extends all of this to $K$ classes with the same $\mathbf p - \mathbf y$ gradient, and is the output layer of neural-network classifiers.
+
+## Further reading
+
+**Textbooks**
+
+- Gareth James, Daniela Witten, Trevor Hastie, Robert Tibshirani and Jonathan Taylor, [_An Introduction to Statistical Learning_](https://www.statlearning.com/), chapter 4: logistic regression alongside discriminant analysis and naive Bayes, with Python labs. Free online.
+- Trevor Hastie, Robert Tibshirani and Jerome Friedman, [_The Elements of Statistical Learning_](https://hastie.su.domains/ElemStatLearn/), §4.4: the full treatment, including IRLS, L1-regularised logistic regression, and the comparison with linear discriminant analysis.
+- Andrew Ng and Tengyu Ma, [Stanford CS229 lecture notes](https://cs229.stanford.edu/main_notes.pdf), chapters 2 and 3: logistic regression, Newton's method, softmax, and generalised linear models derived from the exponential family.
+- Ian Goodfellow, Yoshua Bengio and Aaron Courville, [_Deep Learning_](https://www.deeplearningbook.org/contents/ml.html), chapters 5 and 6: maximum likelihood, cross-entropy, and why sigmoid and softmax outputs pair with log-likelihood losses.
+
+**Papers**
+
+- Joseph Berkson (1944), [Application of the Logistic Function to Bio-Assay](https://doi.org/10.1080/01621459.1944.10500699), _Journal of the American Statistical Association_. Coined "logit".
+- D. R. Cox (1958), [The Regression Analysis of Binary Sequences](https://doi.org/10.1111/j.2517-6161.1958.tb00292.x), _Journal of the Royal Statistical Society, Series B_. Logistic regression in its modern form.
+- J. A. Nelder and R. W. M. Wedderburn (1972), [Generalized Linear Models](https://doi.org/10.2307/2344614), _Journal of the Royal Statistical Society, Series A_. The framework in which logistic regression is one member of a family.
+- A. Albert and J. A. Anderson (1984), [On the Existence of Maximum Likelihood Estimates in Logistic Regression Models](https://doi.org/10.1093/biomet/71.1.1), _Biometrika_. Separation, quasi-separation and overlap.
+- David Firth (1993), [Bias Reduction of Maximum Likelihood Estimates](https://doi.org/10.1093/biomet/80.1.27), _Biometrika_. A penalised likelihood that stays finite under separation.
+- Dong C. Liu and Jorge Nocedal (1989), [On the Limited Memory BFGS Method for Large Scale Optimization](https://doi.org/10.1007/BF01589116), _Mathematical Programming_. The algorithm behind scikit-learn's default solver.
+- Alexandru Niculescu-Mizil and Rich Caruana (2005), [Predicting Good Probabilities with Supervised Learning](https://doi.org/10.1145/1102351.1102430), _ICML_. Which learning methods produce calibrated probabilities.
+- James A. Hanley and Barbara J. McNeil (1982), [The Meaning and Use of the Area under a Receiver Operating Characteristic (ROC) Curve](https://doi.org/10.1148/radiology.143.1.7063747), _Radiology_.
+- Takaya Saito and Marc Rehmsmeier (2015), [The Precision-Recall Plot Is More Informative than the ROC Plot When Evaluating Binary Classifiers on Imbalanced Datasets](https://doi.org/10.1371/journal.pone.0118432), _PLOS ONE_.
+- W. Nick Street, William H. Wolberg and O. L. Mangasarian (1993), [Nuclear Feature Extraction for Breast Tumor Diagnosis](https://doi.org/10.1117/12.148698), _Proc. SPIE 1905_. The source of the breast cancer dataset.
+
+**Documentation**
+
+- scikit-learn: [logistic regression user guide](https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression), [`LogisticRegression`](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html), [probability calibration](https://scikit-learn.org/stable/modules/calibration.html), [tuning the decision threshold](https://scikit-learn.org/stable/modules/classification_threshold.html) and [model evaluation metrics](https://scikit-learn.org/stable/modules/model_evaluation.html).
+- Google's [Machine Learning Crash Course: Logistic regression](https://developers.google.com/machine-learning/crash-course/logistic-regression) and [Classification](https://developers.google.com/machine-learning/crash-course/classification), a gentler interactive introduction to the same ideas.

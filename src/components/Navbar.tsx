@@ -31,21 +31,19 @@ export const Navbar: React.FC = () => {
           <li>
             <Link to="/#contact">Contact</Link>
           </li>
-          <li>
-            <button
-              type="button"
-              className="icon-button"
-              onClick={toggle}
-              aria-label={`Switch to ${next} theme`}
-            >
-              {theme === 'dark' ? (
-                <Sun size={18} aria-hidden />
-              ) : (
-                <Moon size={18} aria-hidden />
-              )}
-            </button>
-          </li>
         </ul>
+        <button
+          type="button"
+          className="icon-button site-nav__theme"
+          onClick={toggle}
+          aria-label={`Switch to ${next} theme`}
+        >
+          {theme === 'dark' ? (
+            <Sun size={18} aria-hidden />
+          ) : (
+            <Moon size={18} aria-hidden />
+          )}
+        </button>
       </nav>
     </header>
   );

@@ -1,14 +1,15 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { blogPosts } from '../data/blogData';
-import { formatPostDate } from '../lib/dates';
+import { categoriesWithPosts, categoryPath } from '../data/blogData';
 import { useMetadata } from '../hooks/useMetadata';
+import { ArticleList } from '../components/blog/ArticleList';
+import { CategoryNav } from '../components/blog/CategoryNav';
 
 export const BlogIndex: React.FC = () => {
   useMetadata({
     title: 'Writing, Siddhesh Sawant',
     description:
-      'Long-form articles by Siddhesh Sawant on Java and Spring internals, Git storage and backend engineering.',
+      'Long-form articles by Siddhesh Sawant on distributed systems, Java and Spring internals, and machine learning from first principles.',
     canonicalPath: '/blog',
   });
 
@@ -20,39 +21,28 @@ export const BlogIndex: React.FC = () => {
           Long-form notes on the internals behind everyday backend work: how the
           frameworks and tools I rely on behave underneath.
         </p>
+        {categoriesWithPosts.length > 0 && <CategoryNav />}
       </header>
 
       <div className="listing__body wrap">
-        {blogPosts.length === 0 ? (
+        {categoriesWithPosts.length === 0 ? (
           <p>No articles published yet.</p>
         ) : (
-          <ol className="articles">
-            {blogPosts.map((post) => (
-              <li key={post.id} className="articles__item">
-                <time dateTime={post.date} className="articles__date num">
-                  {formatPostDate(post.date)}
-                </time>
-                <div className="articles__main">
-                  <h2 className="articles__title">
-                    <Link to={`/blog/${post.id}`}>{post.title}</Link>
-                  </h2>
-                  <p className="articles__meta num">
-                    {post.readTime}
-                    {post.series &&
-                      `, part ${post.series.order} of ${post.series.total} in ${post.series.name}`}
-                  </p>
-                  <p className="articles__summary">{post.summary}</p>
-                  {post.tags.length > 0 && (
-                    <ul className="articles__tags" aria-label="Topics">
-                      {post.tags.map((tag) => (
-                        <li key={tag}>{tag}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ol>
+          categoriesWithPosts.map((category) => (
+            <section
+              key={category.id}
+              className="category"
+              aria-labelledby={`category-${category.id}`}
+            >
+              <header className="category__head">
+                <h2 id={`category-${category.id}`} className="category__title">
+                  <Link to={categoryPath(category)}>{category.title}</Link>
+                </h2>
+                <p className="category__description">{category.description}</p>
+              </header>
+              <ArticleList posts={category.posts} headingLevel={3} />
+            </section>
+          ))
         )}
       </div>
     </div>

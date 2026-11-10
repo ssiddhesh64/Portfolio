@@ -15,6 +15,9 @@ const BlogIndex = React.lazy(() =>
 const BlogPost = React.lazy(() =>
   import('./pages/BlogPost').then((m) => ({ default: m.BlogPost })),
 );
+const BlogCategory = React.lazy(() =>
+  import('./pages/BlogCategory').then((m) => ({ default: m.BlogCategory })),
+);
 const NotFound = React.lazy(() =>
   import('./pages/NotFound').then((m) => ({ default: m.NotFound })),
 );
@@ -43,6 +46,7 @@ const App: React.FC = () => (
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/blog" element={<BlogIndex />} />
+            <Route path="/blog/category/:category" element={<BlogCategory />} />
             <Route path="/blog/:id" element={<BlogPost />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

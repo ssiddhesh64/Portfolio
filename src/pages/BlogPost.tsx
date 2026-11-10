@@ -7,7 +7,7 @@ import React, {
 } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { findPost, neighbours } from '../data/blogData';
+import { categoryPath, findPost, neighbours } from '../data/blogData';
 import { personalInfo } from '../data/resumeData';
 import { formatPostDate } from '../lib/dates';
 import { useMetadata } from '../hooks/useMetadata';
@@ -83,6 +83,12 @@ export const BlogPost: React.FC = () => {
               </span>
             )}
             <span className="num">{post.readTime}</span>
+            <span>
+              In{' '}
+              <Link to={categoryPath(post.category)}>
+                {post.category.title}
+              </Link>
+            </span>
             {post.series && (
               <span>
                 Part <span className="num">{post.series.order}</span> of{' '}
