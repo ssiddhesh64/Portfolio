@@ -1,10 +1,5 @@
 import React, { Suspense, useEffect } from 'react';
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  useLocation,
-} from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { Home } from './pages/Home';
@@ -33,8 +28,12 @@ const ScrollManager: React.FC = () => {
   return null;
 };
 
+/**
+ * The router is supplied by the caller: BrowserRouter in main.tsx,
+ * StaticRouter when prerendering in entry-server.tsx.
+ */
 const App: React.FC = () => (
-  <Router>
+  <>
     <ScrollManager />
     <a href="#main" className="skip-link">
       Skip to content
@@ -54,7 +53,7 @@ const App: React.FC = () => (
       </main>
       <Footer />
     </div>
-  </Router>
+  </>
 );
 
 export default App;

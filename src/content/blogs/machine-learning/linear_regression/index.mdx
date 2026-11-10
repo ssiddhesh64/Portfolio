@@ -2,6 +2,8 @@
 title: 'Linear Regression from First Principles: Least Squares, Geometry and Gradient Descent'
 date: '2026-11-10'
 summary: 'Fitting a straight line is the oldest trick in machine learning and still the one most worth understanding completely. This article builds linear regression from a five-point example to the normal equations, shows why least squares is a projection and a maximum-likelihood estimate at the same time, trains it with gradient descent you can steer, and then puts it to work on a real dataset to see where it holds up and where it breaks.'
+seoTitle: 'Linear Regression from First Principles'
+description: 'Linear regression from a five-point example: the normal equations, least squares as projection and maximum likelihood, gradient descent, and real data.'
 tags:
   [
     'Machine Learning',
@@ -663,6 +665,8 @@ It exists because training $R^2$ can only go up when you add features, which is 
 Metrics compress a model's errors into one number. A **residual plot**, residuals against fitted values, shows their structure, and that structure tells you what to fix. Anscombe's classic [Graphs in Statistical Analysis](https://doi.org/10.1080/00031305.1973.10478966) (1973) made the point with four datasets that share the same fitted line and $R^2$ but look completely different when plotted.
 
 <Figure
+  width={691}
+  height={216}
   light={residLight}
   dark={residDark}
   alt="Three residual-versus-fitted scatter plots. Left: residuals scatter evenly around zero with no pattern. Middle: residuals form a U shape, positive at both ends and negative in the middle. Right: residuals fan out, tightly clustered at low fitted values and widely spread at high ones."
@@ -738,6 +742,8 @@ degree 12 + RidgeCV: train RMSE = 0.213, validation RMSE = 0.433, alpha = 0.17
 ```
 
 <Figure
+  width={691}
+  height={245}
   light={polyLight}
   dark={polyDark}
   alt="Three panels of the same 20 training points with a dashed sine curve. Degree 1: a straight line that misses the curve. Degree 3: a smooth curve close to the sine. Degree 12: a curve that passes near every training point but swings far outside the plot between them, especially near the left edge."

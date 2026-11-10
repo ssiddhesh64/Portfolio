@@ -3,6 +3,8 @@ title: 'What @Transactional Actually Does: Proxies, Thread-Bound Connections and
 date: '2026-11-10'
 readTime: '28 min read'
 summary: 'One annotation, and Spring opens a database transaction, shares its connection with every repository you call, and decides whether to commit or roll back. This article traces a single @Transactional call through the proxy, TransactionInterceptor and the transaction manager, then uses that model to explain propagation, isolation, rollback rules and the pitfalls that follow from them.'
+seoTitle: 'How Spring @Transactional Works: Proxies and Rollback'
+description: 'Trace one @Transactional call through the proxy, TransactionInterceptor and transaction manager to understand propagation, isolation and rollback rules.'
 tags:
   [
     'Spring Boot',

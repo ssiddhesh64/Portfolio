@@ -7,16 +7,59 @@ import React, {
 } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { categoryPath, findPost, neighbours } from '../data/blogData';
+import {
+  categoryPath,
+  findPost,
+  neighbours,
+  type BlogPost as Post,
+} from '../data/blogData';
+import type { PageMeta } from '../seo/head';
 import { personalInfo } from '../data/resumeData';
 import { formatPostDate } from '../lib/dates';
 import { useMetadata } from '../hooks/useMetadata';
+import {
+  blogPostingNode,
+  breadcrumbNode,
+  isoDate,
+  personNode,
+  websiteNode,
+} from '../seo/schema';
 import { mdxComponents } from '../components/blog/mdxComponents';
 import { PostActions } from '../components/blog/PostActions';
 import { PostNav } from '../components/blog/PostNav';
 import { TableOfContents } from '../components/blog/TableOfContents';
 import { readHeadings, type TocItem } from '../components/blog/toc';
 import { NotFound } from './NotFound';
+
+const BRAND = ' | Siddhesh Sawant';
+/** Past this, search results cut the title off; the brand goes first. */
+const TITLE_BUDGET = 65;
+
+const postMeta = (post: Post): PageMeta => {
+  const path = `/blog/${post.id}`;
+  const withBrand = post.seoTitle + BRAND;
+  return {
+    title: withBrand.length <= TITLE_BUDGET ? withBrand : post.seoTitle,
+    description: post.description,
+    path,
+    type: 'article',
+    publishedTime: isoDate(post.date),
+    modifiedTime: isoDate(post.updated ?? post.date),
+    section: post.category.title,
+    tags: post.tags,
+    jsonLd: [
+      websiteNode(),
+      personNode(),
+      blogPostingNode(post),
+      breadcrumbNode([
+        { name: 'Home', path: '/' },
+        { name: 'Writing', path: '/blog' },
+        { name: post.category.title, path: categoryPath(post.category) },
+        { name: post.title, path },
+      ]),
+    ],
+  };
+};
 
 /** Renders nothing; its effect runs once the article body above it has loaded. */
 const OnLoaded: React.FC<{ onLoaded: () => void }> = ({ onLoaded }) => {
@@ -32,15 +75,7 @@ export const BlogPost: React.FC = () => {
   // Tagged with the article it came from, so a stale list never shows.
   const [toc, setToc] = useState<{ id: string; items: TocItem[] }>();
 
-  useMetadata({
-    title: post
-      ? `${post.title}, Siddhesh Sawant`
-      : 'Article not found, Siddhesh Sawant',
-    description: post?.summary ?? 'This article does not exist.',
-    canonicalPath: post ? `/blog/${post.id}` : undefined,
-    type: post ? 'article' : 'website',
-    noindex: !post,
-  });
+  useMetadata(post ? postMeta(post) : null);
 
   const onLoaded = useCallback(() => {
     if (!body.current) return;

@@ -86,9 +86,9 @@ def icon_svg() -> str:
 def og_svg() -> str:
     parts = [
         text_path("Siddhesh Sawant", 100, 96, 226, wght=700, wdth=112),
+        text_path("Backend and machine learning engineer.", 36, 96, 302, wght=500),
         text_path(
-            "Backend engineer working in Java, Spring Boot and Kafka.",
-            36, 96, 302, wght=500,
+            "Java, Spring Boot, Kafka and Python.", 36, 96, 352, wght=500, fill=INK_2
         ),
         f'<rect x="96" y="482" width="1008" height="2" fill="{INK}"/>',
         text_path(

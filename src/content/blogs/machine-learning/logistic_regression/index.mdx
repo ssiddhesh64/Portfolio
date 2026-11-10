@@ -2,6 +2,8 @@
 title: 'Logistic Regression from First Principles: Log-Odds, Likelihood and the Decision Threshold'
 date: '2026-11-10'
 summary: 'Logistic regression is linear regression rebuilt for yes-or-no questions: a weighted sum of features pushed through a sigmoid, trained by maximum likelihood. This article derives it from an eight-point example, shows why the loss is log loss and why its gradient is so simple, trains it with gradient descent and Newton’s method you can steer, breaks it on separable data, and then uses it to diagnose breast tumours, where the interesting decisions are about thresholds and probabilities rather than weights.'
+seoTitle: 'Logistic Regression from First Principles'
+description: "Logistic regression derived step by step: sigmoid and log-odds, log loss and its gradient, gradient descent and Newton's method, and the decision threshold."
 tags:
   [
     'Machine Learning',
@@ -59,6 +61,8 @@ $$
 and it crosses 0.5 at $x = 4.5$ km. As a classifier ("late if $\hat y \ge 0.5$") that is not bad. As a probability model it is broken in two ways, shown in the figure below.
 
 <Figure
+  width={691}
+  height={252}
   light={lineLight}
   dark={lineDark}
   alt="Two panels. Left: the eight deliveries at heights 0 and 1, a dashed straight line running from below 0 to above 1, and a red S-shaped curve that stays between 0 and 1; both cross 0.5 at 4.5 km. Right: the same data plus one late delivery at 25 km; the dashed line has flattened and now crosses 0.5 at 5.34 km, while the S-curve is unchanged and still crosses 0.5 at 4.5 km."
@@ -231,6 +235,8 @@ Nothing stops us minimising $\frac{1}{n}\sum_i (y_i - p_i)^2$ instead. It is bou
 **It is not convex in the weights.** Composing squared error with a sigmoid produces a loss surface with flat plateaus, so gradient descent can stall. Log loss composed with a sigmoid is convex, as we prove below. There is one minimum and every downhill path leads to it.
 
 <Figure
+  width={691}
+  height={238}
   light={lossLight}
   dark={lossDark}
   alt="Two panels for a positive example. Left: loss against predicted probability; log loss rises steeply to infinity as probability approaches 0, while squared error rises only to 1. Right: the size of the gradient with respect to the score; for log loss it approaches 1 for very negative scores, while for squared error it peaks near 0.3 and falls to almost 0 for very negative scores, the confidently wrong region."
@@ -501,6 +507,8 @@ Training accuracy is not the goal. With enough features, almost any labelling of
 The boundary $\mathbf w^\top \mathbf x + b = 0$ is a hyperplane in feature space. With raw features, logistic regression can only draw straight lines between classes. But, exactly as with linear regression, _linear_ refers to the parameters. If you give the model transformed features, the boundary is a hyperplane in the transformed space and can be curved in the original one.
 
 <Figure
+  width={691}
+  height={266}
   light={boundaryLight}
   dark={boundaryDark}
   alt="Three scatter plots of two classes in two dimensions with the model's 0.5 contour drawn in red and the 0.1 and 0.9 contours dashed. Left: two overlapping clouds separated by a straight line, test accuracy 0.90. Middle: one class forms a disc inside a ring of the other; a straight line cuts through both, test accuracy 0.52. Right: the same disc and ring with squared and product features added; the 0.5 contour is a circle between them, test accuracy 0.99."

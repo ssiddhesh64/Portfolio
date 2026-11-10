@@ -3,7 +3,8 @@ import { personalInfo } from '../data/resumeData';
 
 export const Footer: React.FC = () => (
   <footer className="site-footer wrap">
-    <p>
+    {/* Prerendered at build time; the year can roll over before a rebuild. */}
+    <p suppressHydrationWarning>
       © {new Date().getFullYear()} {personalInfo.name} {personalInfo.lastName}
     </p>
     <ul className="link-row" aria-label="Profiles">

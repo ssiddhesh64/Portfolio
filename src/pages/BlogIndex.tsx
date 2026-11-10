@@ -1,16 +1,33 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { categoriesWithPosts, categoryPath } from '../data/blogData';
+import { blogPosts, categoriesWithPosts, categoryPath } from '../data/blogData';
 import { useMetadata } from '../hooks/useMetadata';
+import {
+  blogNode,
+  breadcrumbNode,
+  personNode,
+  websiteNode,
+} from '../seo/schema';
 import { ArticleList } from '../components/blog/ArticleList';
 import { CategoryNav } from '../components/blog/CategoryNav';
 
+const DESCRIPTION =
+  'Long-form articles by Siddhesh Sawant on machine learning from first principles, distributed systems, and Java and Spring internals.';
+
 export const BlogIndex: React.FC = () => {
   useMetadata({
-    title: 'Writing, Siddhesh Sawant',
-    description:
-      'Long-form articles by Siddhesh Sawant on distributed systems, Java and Spring internals, and machine learning from first principles.',
-    canonicalPath: '/blog',
+    title: 'Backend & Machine Learning Articles | Siddhesh Sawant',
+    description: DESCRIPTION,
+    path: '/blog',
+    jsonLd: [
+      websiteNode(),
+      personNode(),
+      blogNode(DESCRIPTION, blogPosts),
+      breadcrumbNode([
+        { name: 'Home', path: '/' },
+        { name: 'Writing', path: '/blog' },
+      ]),
+    ],
   });
 
   return (

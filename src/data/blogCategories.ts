@@ -12,33 +12,39 @@ export interface BlogCategory {
   /** Folder name and URL segment: /blog/category/<id>. Never rename once published. */
   id: string;
   title: string;
+  /** Optional, more searchable <title> than the short display title. */
+  seoTitle?: string;
   /** One or two sentences, shown on the category page and as its meta description. */
   description: string;
 }
 
 export const blogCategories: readonly BlogCategory[] = [
   {
+    id: 'machine-learning',
+    seoTitle: 'Machine Learning from First Principles',
+    title: 'Machine Learning',
+    description:
+      'Classic models built from first principles, with the maths derived and the code run on real data.',
+  },
+  {
     id: 'distributed-systems',
+    seoTitle: 'Distributed Systems Articles',
     title: 'Distributed Systems',
     description:
       'How large systems store, replicate and serve data, traced from the data model down to the storage layer.',
   },
   {
     id: 'spring',
+    seoTitle: 'Spring and Spring Boot Internals',
     title: 'Spring',
     description:
       'What Spring and Spring Boot do between your annotations and a running application: bean lifecycle, proxies and transactions.',
   },
   {
     id: 'java',
+    seoTitle: 'Java Internals: Collections and Hashing',
     title: 'Java',
     description:
       'The language and standard library underneath: collections, hashing and the contracts they rely on.',
-  },
-  {
-    id: 'machine-learning',
-    title: 'Machine Learning',
-    description:
-      'Classic models built from first principles, with the maths derived and the code run on real data.',
   },
 ];

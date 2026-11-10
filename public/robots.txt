@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://siddheshsawant.in/sitemap.xml
+Sitemap: https://www.siddheshsawant.in/sitemap.xml
