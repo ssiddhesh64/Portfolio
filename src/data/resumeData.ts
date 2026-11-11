@@ -33,17 +33,6 @@ export interface RoleItem {
   stack: string[];
 }
 
-export interface ProjectItem {
-  id: string;
-  name: string;
-  summary: string;
-  date: string;
-  details: string[];
-  stack: string[];
-  repoUrl?: string;
-  demoUrl?: string;
-}
-
 export interface SkillCategory {
   category: string;
   items: string[];
@@ -138,69 +127,6 @@ export const roles: RoleItem[] = [
       'The app also served as a proof of concept for using React Native in internal enterprise apps.',
     ],
     stack: ['React Native', 'SAP HANA'],
-  },
-];
-
-export const projects: ProjectItem[] = [
-  {
-    id: 'friend-recommendation',
-    name: 'Friend recommendation',
-    summary:
-      'Link prediction on a directed social graph from Facebook, framed as binary classification.',
-    date: 'Jan 2020',
-    details: [
-      'Engineered about 50 graph features, including Adamic-Adar and the Jaccard coefficient.',
-      // TODO: name the model and the score it reached; "high performance" was removed.
-      'Trained a non-linear classifier on those features.',
-    ],
-    stack: ['Python', 'Graph mining', 'Machine learning'],
-  },
-  {
-    id: 'wikipedia-search',
-    name: 'Wikipedia search engine',
-    summary: 'Full-text search over a 21 GB Wikipedia dump.',
-    date: 'Nov 2019',
-    details: [
-      'Built a multi-level inverted index so lookups stay fast at that size.',
-      // TODO: verify which ranking you used. The old copy said "e.g., TF-IDF/BM25".
-      'Ranked results with TF-IDF and returned the top 10 for each query.',
-      'Supported field-specific queries as well as plain full-text search.',
-    ],
-    stack: ['Python', 'Information retrieval'],
-  },
-  {
-    id: 'mini-torrent',
-    name: 'Mini torrent',
-    summary:
-      'Peer-to-peer file sharing in C++, downloading one file from several peers at once.',
-    date: 'Aug 2019',
-    details: [
-      'Split files into chunks so a client can fetch different chunks from different seeders in parallel.',
-      'Peers talk over sockets, with a thread per transfer.',
-    ],
-    stack: ['C++', 'Sockets', 'Threads'],
-  },
-  {
-    id: 'http-server',
-    name: 'Multi-threaded HTTP server',
-    summary: 'An HTTP server in C/C++ that serves concurrent clients.',
-    date: 'Jan 2019',
-    details: [
-      'Wrote the thread pool that hands incoming connections to worker threads.',
-      'Workers coordinate through condition variables.',
-    ],
-    stack: ['C', 'C++', 'Threads'],
-  },
-  {
-    id: 'mess-portal',
-    name: 'Mess portal',
-    summary: 'A web portal for booking meals in a college mess.',
-    date: 'Jun 2018',
-    details: [
-      'Users can view, change or cancel their meals for any open date.',
-      'An admin view shows meal counts and lets staff change the menu.',
-    ],
-    stack: ['Python', 'Flask', 'SQLite', 'HTML', 'CSS', 'JavaScript'],
   },
 ];
 

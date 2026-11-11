@@ -10,7 +10,8 @@
     "typecheck": "tsc -b",
     "preview": "vite preview",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "repo-stats": "node scripts/repo-stats.mjs"
   },
   "dependencies": {
     "@mdx-js/rollup": "^3.1.1",
