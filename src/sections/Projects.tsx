@@ -177,7 +177,6 @@ const Viewer: React.FC<{ project: Project }> = ({ project }) => {
   if (!tabs.length) return null;
 
   const desktop = project.shots?.find((s) => s.device === 'desktop');
-  const mobile = project.shots?.find((s) => s.device === 'mobile');
   const demo = project.links.find((l) => l.kind === 'demo');
 
   return (
@@ -255,18 +254,6 @@ const Viewer: React.FC<{ project: Project }> = ({ project }) => {
                 />
               </Zoomable>
             </div>
-            {mobile && (
-              <div className="phone">
-                <img
-                  src={mobile.src}
-                  alt={mobile.alt}
-                  width={mobile.width}
-                  height={mobile.height}
-                  loading="lazy"
-                  decoding="async"
-                />
-              </div>
-            )}
             <figcaption className="figure__caption">
               Captured from the live site.
             </figcaption>
@@ -308,20 +295,22 @@ const Featured: React.FC<{ project: Project }> = ({ project: p }) => (
       <Viewer project={p} />
       <ProofLinks links={p.links} />
     </div>
-    <div className="case__decisions">
-      <h4 className="project-label">Decisions worth asking me about</h4>
-      <ol className="decisions">
-        {p.decisions.map((d, i) => (
-          <li key={d.title} className="decisions__item">
-            <span className="decisions__n num" aria-hidden>
-              {String(i + 1).padStart(2, '0')}
-            </span>
-            <h5 className="decisions__title">{d.title}</h5>
-            <p className="decisions__body">{d.body}</p>
-          </li>
-        ))}
-      </ol>
-    </div>
+    {p.decisions.length > 0 && (
+      <div className="case__decisions">
+        <h4 className="project-label">Decisions worth asking me about</h4>
+        <ol className="decisions">
+          {p.decisions.map((d, i) => (
+            <li key={d.title} className="decisions__item">
+              <span className="decisions__n num" aria-hidden>
+                {String(i + 1).padStart(2, '0')}
+              </span>
+              <h5 className="decisions__title">{d.title}</h5>
+              <p className="decisions__body">{d.body}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+    )}
     <div className="case__foot">
       <Next text={p.next} />
       <Stack stack={p.stack} />
@@ -386,10 +375,7 @@ export const Projects: React.FC = () => {
         </div>
         <div className="earlier">
           <h3 className="earlier__title">
-            Earlier work{' '}
-            <span className="earlier__note">
-              2018–2019, mostly during my master’s
-            </span>
+            Earlier work <span className="earlier__note">From my master’s</span>
           </h3>
           <ul className="earlier__list">
             {earlierProjects.map((p) => (

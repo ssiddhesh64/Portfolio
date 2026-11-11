@@ -90,21 +90,7 @@ export const projects: Project[] = [
       { value: '80', label: 'questions in the RTO mock-test bank' },
       { value: '15 / 30', label: 'questions / minutes per timed test' },
     ],
-    decisions: [
-      {
-        title: 'Lock the slot row, not the table',
-        body: 'A booking reads its slot with a pessimistic write lock (SELECT … FOR UPDATE) inside one transaction, checks capacity, then increments the count. Two students racing for the last seat are serialised; the second gets a SlotFullException instead of a double booking.',
-      },
-      {
-        title: 'Leads go to WhatsApp, not a database',
-        body: 'Staff already run the school from WhatsApp, so the enquiry form opens a chat with the message pre-filled. Nothing to host or pay for until bookings need a server.',
-      },
-      {
-        title: 'Hash routes on GitHub Pages',
-        body: 'Pages cannot rewrite unknown paths to index.html, so the site uses HashRouter, and a 404.html sends deep links to their hash route instead of a dead page.',
-      },
-    ],
-    next: 'Point the site’s “Book driving lesson” button at the booking API and run it on PostgreSQL instead of the H2 dev database.',
+    decisions: [],
     stack: [
       'React 19',
       'Vite',
@@ -136,10 +122,9 @@ export const projects: Project[] = [
   S -->|"enquiry, pre-filled"| W([WhatsApp to school staff])
   S -.->|"POST /bookings"| C[BookingController]
   C --> B["BookingService · @Transactional"]
-  B -->|"SELECT … FOR UPDATE"| P[("PostgreSQL: slots, bookings")]
-  class B key`,
+  B -->|"SELECT … FOR UPDATE"| P[("PostgreSQL: slots, bookings")]`,
     architectureCaption:
-      'Solid: live today. Dashed: the booking API, in progress. The slot row lock is what prevents double bookings.',
+      'Solid: live today. Dashed: the booking API, in progress.',
     shots: [
       {
         src: '/projects/royal-motors-home.webp',
@@ -147,13 +132,6 @@ export const projects: Project[] = [
         width: 1600,
         height: 1000,
         device: 'desktop',
-      },
-      {
-        src: '/projects/royal-motors-mobile.webp',
-        alt: 'The same home page on a phone.',
-        width: 600,
-        height: 1298,
-        device: 'mobile',
       },
     ],
   },
@@ -203,8 +181,7 @@ export const projects: Project[] = [
     direction TB
     Q([Query]) --> V[("term → offset")] -->|seek| S[Read postings] --> R["BM25 + phrase"] --> K([Top 10])
   end
-  build ~~~ query
-  class R key`,
+  build ~~~ query`,
     run: 'python3 seed_data.py --offline && python3 app.py',
   },
   {
@@ -249,8 +226,7 @@ export const projects: Project[] = [
   Ct -->|records| S["Services · @Transactional"]
   S --> R[("JPA · H2")]
   S -.->|exceptions| G[ControllerAdvice]
-  G -.->|ApiError JSON| A
-  class S key`,
+  G -.->|ApiError JSON| A`,
     run: './mvnw spring-boot:run',
   },
 ];
@@ -264,21 +240,5 @@ export const earlierProjects: EarlierProject[] = [
       'Peer-to-peer file sharing in C++. Files are split into chunks, so one download pulls different chunks from several seeders in parallel through a thread pool.',
     stack: ['C++', 'Sockets', 'Threads'],
     repo: `${GH}/mini-torrent`,
-  },
-  {
-    id: 'http-server',
-    name: 'Multi-threaded HTTP server',
-    date: 'Jan 2019',
-    summary:
-      'An HTTP server in C/C++ whose thread pool hands connections to workers coordinated by condition variables.',
-    stack: ['C', 'C++', 'Threads'],
-  },
-  {
-    id: 'mess-portal',
-    name: 'Mess portal',
-    date: 'Jun 2018',
-    summary:
-      'Meal booking for a college mess: students change or cancel meals for open dates; staff see counts and edit the menu.',
-    stack: ['Python', 'Flask', 'SQLite'],
   },
 ];
