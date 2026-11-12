@@ -40,7 +40,10 @@ export const personNode = () => ({
   },
   sameAs: [personalInfo.github, personalInfo.linkedin],
   knowsAbout: [
-    ...new Set([...personalInfo.expertise, ...skills.flatMap((s) => s.items)]),
+    ...new Set([
+      ...personalInfo.expertise,
+      ...skills.flatMap((s) => s.items.map((i) => i.name)),
+    ]),
   ],
   alumniOf: education.map((e) => ({
     '@type': 'CollegeOrUniversity',

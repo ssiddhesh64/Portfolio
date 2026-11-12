@@ -33,9 +33,69 @@ export interface RoleItem {
   stack: string[];
 }
 
+export interface ProjectItem {
+  id: string;
+  name: string;
+  summary: string;
+  date: string;
+  details: string[];
+  stack: string[];
+  repoUrl?: string;
+  demoUrl?: string;
+}
+
+/** Which mark to draw beside a skill. See src/components/SkillIcon.tsx. */
+export type SkillIconId =
+  | 'java'
+  | 'python'
+  | 'cpp'
+  | 'sql'
+  | 'javascript'
+  | 'typescript'
+  | 'spring-boot'
+  | 'kafka'
+  | 'react'
+  | 'flask'
+  | 'scikit-learn'
+  | 'numpy'
+  | 'azure'
+  | 'gcp'
+  | 'docker'
+  | 'kubernetes'
+  | 'git'
+  | 'postgresql'
+  | 'cosmos-db'
+  | 'elasticsearch'
+  | 'sqlite'
+  | 'sap';
+
+/**
+ * Evidence that a stack list or article tag can't express. Everything else
+ * the Skills section shows is derived from `roles`, `projects` and article
+ * tags, so a skill only ever points at things that are on the site.
+ */
+export type SkillEvidence =
+  /** A role on the site, with a note on how the skill was used there. */
+  | { kind: 'role'; roleId: string; note: string }
+  | { kind: 'article'; slug: string; note: string }
+  | { kind: 'link'; title: string; href: string; note: string }
+  /** Personal work with nothing on the site to link to. */
+  | { kind: 'personal'; note: string };
+
+export interface SkillItem {
+  name: string;
+  icon: SkillIconId;
+  /**
+   * Strings in a role/project `stack` or an article's `tags` that count as
+   * this skill. Defaults to [name].
+   */
+  matches?: string[];
+  evidence?: SkillEvidence[];
+}
+
 export interface SkillCategory {
   category: string;
-  items: string[];
+  items: SkillItem[];
 }
 
 export interface EducationItem {
@@ -130,31 +190,239 @@ export const roles: RoleItem[] = [
   },
 ];
 
+export const projects: ProjectItem[] = [
+  {
+    id: 'friend-recommendation',
+    name: 'Friend recommendation',
+    summary:
+      'Link prediction on a directed social graph from Facebook, framed as binary classification.',
+    date: 'Jan 2020',
+    details: [
+      'Engineered about 50 graph features, including Adamic-Adar and the Jaccard coefficient.',
+      // TODO: name the model and the score it reached; "high performance" was removed.
+      'Trained a non-linear classifier on those features.',
+    ],
+    stack: ['Python', 'Graph mining', 'Machine learning'],
+  },
+  {
+    id: 'wikipedia-search',
+    name: 'Wikipedia search engine',
+    summary: 'Full-text search over a 21 GB Wikipedia dump.',
+    date: 'Nov 2019',
+    details: [
+      'Built a multi-level inverted index so lookups stay fast at that size.',
+      // TODO: verify which ranking you used. The old copy said "e.g., TF-IDF/BM25".
+      'Ranked results with TF-IDF and returned the top 10 for each query.',
+      'Supported field-specific queries as well as plain full-text search.',
+    ],
+    stack: ['Python', 'Information retrieval'],
+  },
+  {
+    id: 'mini-torrent',
+    name: 'Mini torrent',
+    summary:
+      'Peer-to-peer file sharing in C++, downloading one file from several peers at once.',
+    date: 'Aug 2019',
+    details: [
+      'Split files into chunks so a client can fetch different chunks from different seeders in parallel.',
+      'Peers talk over sockets, with a thread per transfer.',
+    ],
+    stack: ['C++', 'Sockets', 'Threads'],
+  },
+  {
+    id: 'http-server',
+    name: 'Multi-threaded HTTP server',
+    summary: 'An HTTP server in C/C++ that serves concurrent clients.',
+    date: 'Jan 2019',
+    details: [
+      'Wrote the thread pool that hands incoming connections to worker threads.',
+      'Workers coordinate through condition variables.',
+    ],
+    stack: ['C', 'C++', 'Threads'],
+  },
+  {
+    id: 'mess-portal',
+    name: 'Mess portal',
+    summary: 'A web portal for booking meals in a college mess.',
+    date: 'Jun 2018',
+    details: [
+      'Users can view, change or cancel their meals for any open date.',
+      'An admin view shows meal counts and lets staff change the menu.',
+    ],
+    stack: ['Python', 'Flask', 'SQLite', 'HTML', 'CSS', 'JavaScript'],
+  },
+];
+
+const PORTFOLIO_REPO = 'https://github.com/ssiddhesh64/Portfolio';
+
 export const skills: SkillCategory[] = [
   {
     category: 'Languages',
-    items: ['Java', 'Python', 'C/C++', 'SQL', 'JavaScript', 'TypeScript'],
+    items: [
+      { name: 'Java', icon: 'java' },
+      { name: 'Python', icon: 'python' },
+      { name: 'C/C++', icon: 'cpp', matches: ['C', 'C++'] },
+      {
+        name: 'SQL',
+        icon: 'sql',
+        evidence: [
+          {
+            kind: 'role',
+            roleId: 'royal-motors',
+            note: 'Used day to day in client work.',
+          },
+          { kind: 'role', roleId: 'walmart', note: 'Used day to day at work.' },
+          { kind: 'personal', note: 'Used day to day in my own projects.' },
+        ],
+      },
+      { name: 'JavaScript', icon: 'javascript' },
+      {
+        name: 'TypeScript',
+        icon: 'typescript',
+        evidence: [
+          {
+            kind: 'link',
+            title: 'This website',
+            href: PORTFOLIO_REPO,
+            note: 'Written in TypeScript end to end; the source is public.',
+          },
+        ],
+      },
+    ],
   },
   {
-    category: 'Frameworks and messaging',
-    items: ['Spring Boot', 'Kafka', 'React', 'React Native', 'Flask'],
+    category: 'Frameworks and Messaging',
+    items: [
+      { name: 'Spring Boot', icon: 'spring-boot' },
+      { name: 'Kafka', icon: 'kafka' },
+      {
+        name: 'React',
+        icon: 'react',
+        evidence: [
+          {
+            kind: 'link',
+            title: 'This website',
+            href: PORTFOLIO_REPO,
+            note: 'React 19, prerendered to static HTML at build time.',
+          },
+        ],
+      },
+      { name: 'React Native', icon: 'react' },
+      { name: 'Flask', icon: 'flask' },
+    ],
   },
   {
-    category: 'Machine learning',
-    items: ['scikit-learn', 'NumPy'],
+    category: 'Machine Learning',
+    items: [
+      {
+        name: 'scikit-learn',
+        icon: 'scikit-learn',
+        evidence: [
+          {
+            kind: 'article',
+            slug: 'linear-regression',
+            note: 'Its worked examples use scikit-learn models and datasets.',
+          },
+          {
+            kind: 'article',
+            slug: 'logistic-regression',
+            note: 'Its worked examples use scikit-learn models and datasets.',
+          },
+        ],
+      },
+      {
+        name: 'NumPy',
+        icon: 'numpy',
+        evidence: [
+          {
+            kind: 'article',
+            slug: 'linear-regression',
+            note: 'Its code examples are written with NumPy.',
+          },
+          {
+            kind: 'article',
+            slug: 'logistic-regression',
+            note: 'Its code examples are written with NumPy.',
+          },
+        ],
+      },
+    ],
   },
   {
-    category: 'Cloud and infrastructure',
-    items: ['Azure', 'GCP', 'Docker', 'Kubernetes', 'Git'],
+    category: 'Cloud and Infrastructure',
+    items: [
+      { name: 'Azure', icon: 'azure' },
+      {
+        name: 'GCP',
+        icon: 'gcp',
+        evidence: [
+          {
+            kind: 'role',
+            roleId: 'walmart',
+            note: 'Deployed to GCP when a release required it.',
+          },
+        ],
+      },
+      {
+        name: 'Docker',
+        icon: 'docker',
+        evidence: [
+          {
+            kind: 'role',
+            roleId: 'royal-motors',
+            note: 'Used in client work.',
+          },
+          { kind: 'role', roleId: 'walmart', note: 'Used at work.' },
+          { kind: 'personal', note: 'Used in my own projects.' },
+        ],
+      },
+      {
+        name: 'Kubernetes',
+        icon: 'kubernetes',
+        evidence: [
+          {
+            kind: 'role',
+            roleId: 'royal-motors',
+            note: 'Used in client work.',
+          },
+          { kind: 'role', roleId: 'walmart', note: 'Used at work.' },
+          { kind: 'personal', note: 'Used in my own projects.' },
+        ],
+      },
+      { name: 'Git', icon: 'git' },
+    ],
   },
   {
     category: 'Databases',
     items: [
-      'PostgreSQL',
-      'Azure Cosmos DB',
-      'Elasticsearch',
-      'SQLite',
-      'SAP HANA',
+      {
+        name: 'PostgreSQL',
+        icon: 'postgresql',
+        evidence: [
+          {
+            kind: 'role',
+            roleId: 'royal-motors',
+            note: 'Used in client projects.',
+          },
+          {
+            kind: 'role',
+            roleId: 'walmart',
+            note: 'Used in my early work at Walmart.',
+          },
+        ],
+      },
+      {
+        name: 'Azure Cosmos DB',
+        icon: 'cosmos-db',
+        evidence: [{ kind: 'role', roleId: 'walmart', note: 'Used at work.' }],
+      },
+      {
+        name: 'Elasticsearch',
+        icon: 'elasticsearch',
+        evidence: [{ kind: 'role', roleId: 'walmart', note: 'Used at work.' }],
+      },
+      { name: 'SQLite', icon: 'sqlite' },
+      { name: 'SAP HANA', icon: 'sap' },
     ],
   },
 ];
