@@ -1,5 +1,10 @@
 import { findPost, blogPosts } from '../data/blogData';
-import { projects, roles, type SkillItem } from '../data/resumeData';
+import {
+  projects,
+  roleDetails,
+  roles,
+  type SkillItem,
+} from '../data/resumeData';
 import { formatYearMonth, formatRange } from './dates';
 
 export type EvidenceKind = 'role' | 'project' | 'article' | 'link' | 'personal';
@@ -61,7 +66,7 @@ export function evidenceFor(skill: SkillItem): EvidenceEntry[] {
       kind: 'role',
       title: r.org,
       meta: `${r.title}, ${formatRange(r.start, r.end)}`,
-      note: quote(r.details, terms) ?? roleNote(r.id),
+      note: quote(roleDetails(r), terms) ?? roleNote(r.id),
       href: `/#${r.id}`,
     }));
 

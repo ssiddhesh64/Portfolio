@@ -29,8 +29,20 @@ export interface RoleItem {
   end?: YearMonth;
   /** Overrides the computed tenure, e.g. for internships counted in weeks. */
   tenureNote?: string;
+  /** The team within the org, shown in place of the title when there are positions. */
+  team?: string;
+  /** Bullets for the role as a whole. Position bullets live under `positions`. */
   details: string[];
+  /** Titles held within the role, newest first, e.g. after a promotion. */
+  positions?: PositionItem[];
   stack: string[];
+}
+
+export interface PositionItem {
+  title: string;
+  start: YearMonth;
+  end?: YearMonth;
+  details: string[];
 }
 
 export interface ProjectItem {
@@ -137,39 +149,48 @@ export const personalInfo: PersonalInfo = {
 
 export const roles: RoleItem[] = [
   {
-    id: 'royal-motors',
-    org: 'Royal Motors',
-    title: 'Software Developer',
+    id: 'freelance',
+    org: 'Self-employed',
+    title: 'Freelance Backend Engineer',
     kind: 'freelance',
     location: 'Remote',
-    start: '2025-08',
+    start: '2025-12',
     details: [
-      'Building the Spring Boot backend for an appointment booking system: scheduling, slot availability and the booking workflow.',
-      'REST APIs for bookings, customer records and appointment tracking.',
-      // TODO: verify. Is there a number for how much conflicts dropped?
-      'Moved appointment scheduling off a manual process, which reduced double bookings.',
+      'Royal Motors (automotive services, Dec 2025 – Mar 2026): designed and built Spring Boot REST APIs for appointment scheduling, slot availability and booking, replacing a fully manual booking process.',
+      'Taking on freelance backend work alongside focused upskilling in system design and cloud-native development.',
     ],
     stack: ['Java', 'Spring Boot', 'REST'],
   },
   {
     id: 'walmart',
     org: 'Walmart Global Tech',
-    title: 'Software Developer 2',
+    title: 'Software Engineer II',
+    team: 'Pricing team, Walmart International',
     kind: 'full-time',
     location: 'Bangalore',
     start: '2020-08',
     end: '2025-05',
-    details: [
-      // TODO: verify 120K–180K requests/day and ~120 ms p95.
-      'Built Spring Boot microservices for the e-commerce platform, serving 120K–180K requests a day at about 120 ms p95.',
-      // TODO: verify 120 peak TPS and ~100 ms p95. Name the service if you can.
-      'Owned a customer-facing service end to end. It peaks at 120 TPS with p95 latency around 100 ms.',
-      // TODO: verify 15+ hours/week. Removed "productivity by 40%": restore only with a source.
-      'Wrote Python automation for recurring operational work, saving the team over 15 hours a week.',
-      // TODO: verify 1M+ events/day, and say what the 40% throughput gain was measured against.
-      'Designed Kafka event pipelines processing over 1M events a day, raising throughput by 40%.',
-      // TODO: verify ~100K articles/day, and say what an "article" is here.
-      'Built a scheduled Azure job that ingests about 100K articles a day, replacing manual data updates.',
+    details: [],
+    positions: [
+      {
+        title: 'Software Engineer II',
+        start: '2022-08',
+        end: '2025-05',
+        details: [
+          'Owned the design, development and production support of a customer-facing pricing microservice in Java and Spring Boot, serving 120 peak TPS at about 100 ms p95.',
+          'Designed Kafka event-driven pipelines that process over 1M price-change events a day, propagating prices to 300+ Massmart stores across Game, Makro and Builders, and improved their throughput by 40%.',
+          'Automated operational workflows in Python, saving the team over 15 engineer-hours a week of manual effort.',
+        ],
+      },
+      {
+        title: 'Software Engineer I',
+        start: '2020-08',
+        end: '2022-07',
+        details: [
+          'Joined a newly formed team building a pricing microservices platform from the ground up, splitting legacy monolithic pricing capabilities into independently scalable services.',
+          'Helped migrate pricing data and business capabilities from the monolith to the new microservices, making pricing operations more modular and easier to maintain.',
+        ],
+      },
     ],
     stack: ['Java', 'Spring Boot', 'Kafka', 'Python', 'Azure'],
   },
@@ -183,11 +204,17 @@ export const roles: RoleItem[] = [
     end: '2019-07',
     tenureNote: '10 weeks',
     details: [
-      'Built a React Native app that charts point-of-sale device metrics from an SAP HANA backend.',
-      'The app also served as a proof of concept for using React Native in internal enterprise apps.',
+      'Built a React Native proof-of-concept app on an SAP HANA backend that charts point-of-sale device metrics.',
+      'Used it to assess React Native for internal enterprise apps.',
     ],
     stack: ['React Native', 'SAP HANA'],
   },
+];
+
+/** Every bullet for a role, including those under its positions. */
+export const roleDetails = (role: RoleItem): string[] => [
+  ...role.details,
+  ...(role.positions ?? []).flatMap((p) => p.details),
 ];
 
 export const projects: ProjectItem[] = [
@@ -268,7 +295,7 @@ export const skills: SkillCategory[] = [
         evidence: [
           {
             kind: 'role',
-            roleId: 'royal-motors',
+            roleId: 'freelance',
             note: 'Used day to day in client work.',
           },
           { kind: 'role', roleId: 'walmart', note: 'Used day to day at work.' },
@@ -369,7 +396,7 @@ export const skills: SkillCategory[] = [
         evidence: [
           {
             kind: 'role',
-            roleId: 'royal-motors',
+            roleId: 'freelance',
             note: 'Used in client work.',
           },
           { kind: 'role', roleId: 'walmart', note: 'Used at work.' },
@@ -382,7 +409,7 @@ export const skills: SkillCategory[] = [
         evidence: [
           {
             kind: 'role',
-            roleId: 'royal-motors',
+            roleId: 'freelance',
             note: 'Used in client work.',
           },
           { kind: 'role', roleId: 'walmart', note: 'Used at work.' },
@@ -401,7 +428,7 @@ export const skills: SkillCategory[] = [
         evidence: [
           {
             kind: 'role',
-            roleId: 'royal-motors',
+            roleId: 'freelance',
             note: 'Used in client projects.',
           },
           {

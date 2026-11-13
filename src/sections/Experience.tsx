@@ -9,6 +9,14 @@ const KIND_LABEL: Record<RoleItem['kind'], string> = {
   internship: 'internship',
 };
 
+const Points: React.FC<{ items: string[] }> = ({ items }) => (
+  <ul className="entry__points">
+    {items.map((d) => (
+      <li key={d}>{d}</li>
+    ))}
+  </ul>
+);
+
 export const Experience: React.FC = () => (
   <section
     className="section wrap"
@@ -23,7 +31,7 @@ export const Experience: React.FC = () => (
           <p className={`entry__when num${role.end ? '' : ' is-current'}`}>
             {formatRange(role.start, role.end)}
           </p>
-          <p className="entry__role">{role.title}</p>
+          <p className="entry__role">{role.team ?? role.title}</p>
           <p className="entry__facts">
             <span>{role.location}</span>
             <span>{KIND_LABEL[role.kind]}</span>
@@ -33,11 +41,22 @@ export const Experience: React.FC = () => (
                 formatTenure(monthsBetween(role.start, role.end))}
             </span>
           </p>
-          <ul className="entry__points">
-            {role.details.map((d) => (
-              <li key={d}>{d}</li>
-            ))}
-          </ul>
+          {role.details.length > 0 && <Points items={role.details} />}
+          {role.positions && (
+            <ol className="entry__positions">
+              {role.positions.map((p) => (
+                <li key={p.title} className="position">
+                  <h4 className="position__title">
+                    {p.title}
+                    <span className="position__when num">
+                      {formatRange(p.start, p.end)}
+                    </span>
+                  </h4>
+                  <Points items={p.details} />
+                </li>
+              ))}
+            </ol>
+          )}
           <p className="entry__stack">
             <span className="visually-hidden">Technologies: </span>
             {role.stack.join(', ')}
