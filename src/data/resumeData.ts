@@ -121,7 +121,7 @@ export const personalInfo: PersonalInfo = {
   email: 'ssiddhesh64@gmail.com',
   github: 'https://github.com/ssiddhesh64',
   linkedin: 'https://www.linkedin.com/in/ssiddhesh64/',
-  resumeUrl: '/Siddhesh_resume_Nov_26.pdf',
+  resumeUrl: '/resumes/Resume_Nov_2026.pdf',
   resumeFileName: 'Siddhesh_Sawant_Resume.pdf',
   resumeMeta: 'PDF, 48 KB',
   expertise: [
